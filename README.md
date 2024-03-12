@@ -22,7 +22,35 @@ Lots and lots of boilerplate written for you.
 
 I realized I needed something like this when I tried to implement a recursive type definition.  [Rust's static type system could not represent the type](https://users.rust-lang.org/t/recursive-generic-type-parameters-full-featured-union-types/108114) that I needed without imposing a finite recursion depth.  But using an `enum` doubled the size of my implementation because monomorphization across the variants wasn't supported.
 
-## Features
+## Usage
+
+Defining a sum type is just like any other enum:
+```rust
+summum!{
+    #[derive(Debug, Clone)]
+    enum VecOrV {
+        Vec(Vec<V>),
+        V(V),
+    }
+}
+```
+
+And you automatically get all the accessors you would want*:
+- [From<T>](https://doc.rust-lang.org/std/convert/trait.From.html) `impl` for each variant
+- `pub fn try_borrow_**t**(&self) -> Option<&T>`
+- `pub fn borrow_**t**(&self) -> &T`
+- `pub fn try_borrow_mut_**t**(&mut self) -> Option<&mut T>`
+- `pub fn borrow_mut_**t**(&mut self) -> &mut T`
+- `pub fn try_into_**t**(self) -> Option<T>`
+- `pub fn into_**t**(self) -> T`
+
+Note: **t** is a lower_snake_case rendering of the variant identifier or type
+
+*If you want more accessors, please tell me
+
+#### Future Plan for Accessors
+
+I'd like to implement generic accessors, along the lines of: `pub fn try_into_sub<T>(self) -> Option<T>`, for example.  This would eliminate the annoyance of remembering/ guessing what identifier is assigned to a particular variant.  Unfortunately that seems to be blcoked on [this issue](https://github.com/rust-lang/rust/issues/20041) for the time being.
 
 
 

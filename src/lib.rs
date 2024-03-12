@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use heck::AsUpperCamelCase;
+use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, ItemEnum, Variant, Ident, Token, Type, Generics, Visibility, parse};
+use syn::{parse_macro_input, Attribute, ItemEnum, Fields, Variant, Ident, Token, Type, Generics, Visibility, parse};
 use syn::spanned::Spanned;
 
 struct TypeItem {
@@ -207,17 +207,60 @@ pub fn summum(input: TokenStream) -> TokenStream {
         cases,
     } = parse_macro_input!(input as TypeItem);
 
-    println!("GOAT finished parse");
-
-    let cases_tokens = cases.into_iter().map(|variant| {
-
-
-        println!("GOAT {:?}", variant.ident);
-        // quote! { #item_ident(#item_type) }
-
-        quote! { #variant }
-
+    let cases_tokens = cases.iter().map(|variant| quote! {
+        #variant
     }).collect::<Vec<_>>();
+
+    let from_impls = cases.iter().map(|variant| {
+        let ident = &variant.ident;
+        let sub_type = type_from_fields(&variant.fields);
+
+        quote! {
+            impl #generics From<#sub_type> for #name #generics {
+                fn from(val: #sub_type) -> Self {
+                    #name::#ident(val)
+                }
+            }
+        }
+    }).collect::<Vec<_>>();
+
+    let accessor_impls = cases.iter().map(|variant| {
+        let ident = &variant.ident;
+        let sub_type = type_from_fields(&variant.fields);
+
+        let try_borrow_fn_name = snake_ident("try_borrow", &variant.ident);
+        let borrow_fn_name = snake_ident("borrow", &variant.ident);
+        let try_borrow_mut_fn_name = snake_ident("try_borrow_mut", &variant.ident);
+        let borrow_mut_fn_name = snake_ident("borrow_mut", &variant.ident);
+        let try_into_fn_name = snake_ident("try_into", &variant.ident);
+        let into_fn_name = snake_ident("into", &variant.ident);
+
+        quote! {
+            pub fn #try_borrow_fn_name(&self) -> Option<&#sub_type> {
+                match self{Self::#ident(val)=>Some(val), _=>None}
+            }
+            pub fn #borrow_fn_name(&self) -> &#sub_type {
+                self.#try_borrow_fn_name().unwrap()
+            }
+            pub fn #try_borrow_mut_fn_name(&mut self) -> Option<&mut #sub_type> {
+                match self{Self::#ident(val)=>Some(val), _=>None}
+            }
+            pub fn #borrow_mut_fn_name(&mut self) -> &mut #sub_type {
+                self.#try_borrow_mut_fn_name().unwrap()
+            }
+            pub fn #try_into_fn_name(self) -> Option<#sub_type> {
+                match self{Self::#ident(val)=>Some(val), _=>None}
+            }
+            pub fn #into_fn_name(self) -> #sub_type {
+                self.#try_into_fn_name().unwrap()
+            }
+        }
+    }).collect::<Vec<_>>();
+    let accessors_impl = quote!{
+        impl #generics #name #generics {
+            #(#accessor_impls)*
+        }
+    };
 
     // let impls = if let Some(superset) = superset {
     //     quote! {
@@ -234,6 +277,7 @@ pub fn summum(input: TokenStream) -> TokenStream {
     // };
 
     quote! {
+        #[allow(dead_code)]
         #(#attrs)*
         #vis enum #name #generics {
             #(#cases_tokens),*
@@ -241,19 +285,11 @@ pub fn summum(input: TokenStream) -> TokenStream {
 
         //#impls
 
-        // #(
-        //     impl From<#cases> for #name {
-        //         fn from(value: #cases) -> Self {
-        //             #name::#cases(value)
-        //         }
-        //     }
-        // )*
+        #(#from_impls)*
+
+        #accessors_impl
     }
     .into()
-
-    // quote!{
-    //     #vis struct #name;
-    // }.into()
 }
 
 
@@ -261,4 +297,15 @@ fn ident_from_type(item_type: &Type) -> Ident {
     let item_ident = quote!{ #item_type }.to_string();
     let item_ident = AsUpperCamelCase(item_ident).to_string();
     Ident::new(&item_ident, item_type.span())
+}
+
+fn snake_ident(base: &str, ident: &Ident) -> Ident {
+    let ident_string = format!("{base}_{}", AsSnakeCase(ident.to_string()));
+    Ident::new(&ident_string, ident.span())
+}
+
+fn type_from_fields(fields: &Fields) -> &Type {
+    if let Fields::Unnamed(field) = fields {
+        &field.unnamed.first().unwrap().ty
+    } else {panic!()}
 }
