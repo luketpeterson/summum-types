@@ -1,5 +1,5 @@
 [package]
-name = "typeunion"
+name = "summum-types"
 description = "Sum Type macro with all the features"
 keywords = ["macro", "type-union", "sum-type", "union-type", "enum"]
 authors = ["Luke Peterson <luketpeterson@gmail.com>"]
