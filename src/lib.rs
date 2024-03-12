@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use heck::AsUpperCamelCase;
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, Ident, Token, Type, Generics, Visibility};
+use syn::{parse_macro_input, Attribute, ItemEnum, Variant, Ident, Token, Type, Generics, Visibility, parse};
 use syn::spanned::Spanned;
 
 struct TypeItem {
@@ -10,37 +10,29 @@ struct TypeItem {
     vis: Visibility,
     name: Ident,
     generics: Generics,
-    cases: Vec<(Type, Ident)>,
+    cases: Vec<Variant>,
 }
 
-impl Parse for TypeItem {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let attrs = input.call(Attribute::parse_outer)?;
-        let vis = input.parse()?;
+impl TypeItem {
+    fn parse_haskell_style(input: ParseStream, attrs: Vec<Attribute>, vis: Visibility) -> Result<Self> {
         let _ = input.parse::<Token![type]>()?;
         let name = input.parse()?;
         let generics: Generics = input.parse()?;
         let _ = input.parse::<Token![=]>()?;
         let mut cases = vec![];
 
-        println!("GOAT startin");
-
         loop {
-
             let item_type = input.parse()?;
 
             let item_ident = if input.peek(Token![as]) {
-println!("GOAT WAAAAAAAAAAAAA");
                 let _ = input.parse::<Token![as]>()?;
                 input.parse::<Ident>()?
             } else {
-println!("GOAT Nope");
                 ident_from_type(&item_type)
             };
 
-            cases.push((item_type, item_ident));
-
-            println!("GOAT finished first");
+            let variant: Variant = parse(quote!{ #item_ident(#item_type) }.into())?;
+            cases.push(variant);
 
             if input.peek(Token![;]) {
                 let _ = input.parse::<Token![;]>()?;
@@ -57,6 +49,38 @@ println!("GOAT Nope");
             generics,
             cases,
         })
+    }
+
+    fn parse_enum_style(input: ParseStream, attrs: Vec<Attribute>, vis: Visibility) -> Result<Self> {
+        let enum_block: ItemEnum = input.parse()?;
+        let name = enum_block.ident;
+        let generics = enum_block.generics;
+        let cases = enum_block.variants.into_iter().collect();
+
+        Ok(Self {
+            attrs,
+            vis,
+            name,
+            generics,
+            cases,
+        })
+    }
+}
+
+impl Parse for TypeItem {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+        let vis = input.parse()?;
+
+        if input.peek(Token![type]) {
+            TypeItem::parse_haskell_style(input, attrs, vis)
+        } else if input.peek(Token![enum]) {
+            TypeItem::parse_enum_style(input, attrs, vis)
+        } else {
+            input.step(|cursor| {
+                Err(cursor.error(format!("expected `enum` or `type`")))
+            })
+        }
     }
 }
 
@@ -175,8 +199,6 @@ impl Parse for Args {
 #[proc_macro]
 pub fn summum(input: TokenStream) -> TokenStream {
 
-    println!("GOAT First thing");
-
     let TypeItem {
         attrs,
         vis,
@@ -187,9 +209,14 @@ pub fn summum(input: TokenStream) -> TokenStream {
 
     println!("GOAT finished parse");
 
-    let cases_tokens = cases.into_iter().map(|(item_type, item_ident)| {
-        println!("GOAT {:?}", item_ident);
-        quote! { #item_ident(#item_type) }
+    let cases_tokens = cases.into_iter().map(|variant| {
+
+
+        println!("GOAT {:?}", variant.ident);
+        // quote! { #item_ident(#item_type) }
+
+        quote! { #variant }
+
     }).collect::<Vec<_>>();
 
     // let impls = if let Some(superset) = superset {
@@ -235,23 +262,3 @@ fn ident_from_type(item_type: &Type) -> Ident {
     let item_ident = AsUpperCamelCase(item_ident).to_string();
     Ident::new(&item_ident, item_type.span())
 }
-
-// fn ident_from_type(item_type: &Type) -> Ident {
-//     let item_ident = quote!{ #item_type }.to_string();
-//     let item_ident = strip_to_alphanum(&item_ident);
-//     println!("GOAT before {item_ident}");
-
-//     let item_ident = AsUpperCamelCase(item_ident).to_string();
-//     println!("GOAT  after {item_ident}");
-//     Ident::new(&item_ident, item_type.span())
-// }
-
-// fn strip_to_alphanum(input: &str) -> String {
-//     let mut output = String::with_capacity(input.len());
-//     for cur_char in input.chars() {
-//         if cur_char.is_alphanumeric() {
-//             output.push(cur_char);
-//         }
-//     }
-//     output
-// }
