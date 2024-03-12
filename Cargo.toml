@@ -1,0 +1,16 @@
+[package]
+name = "typeunion"
+description = "Sum Type macro with all the features"
+keywords = ["macro", "type-union", "sum-type", "union-type", "enum"]
+authors = ["Luke Peterson <luketpeterson@gmail.com>"]
+repository = "https://github.com/luketpeterson/summum-types"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0.33"
+syn = { version = "2.0.39", features = ["full"] }
