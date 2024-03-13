@@ -3,9 +3,9 @@ A sum-type macro crate with all the features
 
 ## Summary
 
-This crate strives to provide dynamic runtime-resolving types on top of Rust’s static compile-time types.
+This crate strives to provide dynamic runtime-resolving types on top of Rust’s static compile-time types, with full support for generics, lifetimes, visibility, etc.
 
-To that end, the `summum` macro allows for easy declaration of sum-types that:
+The `summum` macro allows for easy declaration of sum-types that:
 - come with all the traits and methods you'd expect for conversion and access
 - allow generic method implementation across all variants
 - support abstract interfaces to delegate to sub-type methods
@@ -20,7 +20,7 @@ I realized I needed something like this when I tried to implement a recursive ty
 
 ### Summum??
 
-It'a just a dumb pun.  I needed a unique name for crates.io.  It means "highest" in Latin.  No connection whatsoever to the [pyramid people in Utah](https://en.wikipedia.org/wiki/Summum).
+It'a just a dumb pun.  It means "highest" in Latin.  No connection whatsoever to the [pyramid people in Utah](https://en.wikipedia.org/wiki/Summum).
 
 ## Usage
 
@@ -45,6 +45,7 @@ And you automatically get all the accessors you'd want¹:
 - `pub fn borrow_mut_*t*(&mut self) -> &mut T`
 - `pub fn try_into_*t*(self) -> Option<T>`
 - `pub fn into_*t*(self) -> T`
+- `pub fn SumT::variants() -> &[&str]`
 
 **Note**: `*t*` is a lower_snake_case rendering of the variant identifier or type
 

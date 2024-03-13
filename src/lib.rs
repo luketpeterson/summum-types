@@ -243,6 +243,20 @@ pub fn summum(input: TokenStream) -> TokenStream {
         }
     }).collect::<Vec<_>>();
 
+    let variants_strs = cases.iter().map(|variant| {
+        let ident_string = &variant.ident.to_string();
+        quote! {
+            #ident_string
+        }
+    }).collect::<Vec<_>>();
+    let variants_impl = quote!{
+        impl #generics #name #generics {
+            pub const fn variants() -> &'static[&'static str] {
+                &[#(#variants_strs),* ]
+            }
+        }
+    };
+
     let accessor_impls = cases.iter().map(|variant| {
         let ident = &variant.ident;
         let sub_type = type_from_fields(&variant.fields);
@@ -306,11 +320,11 @@ pub fn summum(input: TokenStream) -> TokenStream {
             #(#cases_tokens),*
         }
 
-        //#impls
-
         #(#from_impls)*
 
         #(#try_from_impls)*
+
+        #variants_impl
 
         #accessors_impl
     }
@@ -365,3 +379,4 @@ fn type_params_from_generics(generics: &Generics) -> Vec<&TypeParam> {
 }
 
 //GOAT, remember to generate an example so docs will be built
+//GOAT, attribute or something so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
