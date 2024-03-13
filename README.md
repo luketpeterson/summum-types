@@ -35,9 +35,9 @@ summum!{
 }
 ```
 
-And you automatically get all the accessors you'd want^:
+And you automatically get all the accessors you'd want¹:
 - [From](https://doc.rust-lang.org/std/convert/trait.From.html) `impl` to create the sum type from any of each of its variants
-- [TryFrom](https://doc.rust-lang.org/std/convert/trait.TryFrom.html) `impl`, to convert the sum type back to any of its variants, except where the variant type would be an "uncovered" generic as described [here](https://doc.rust-lang.org/error_codes/E0210.html)
+- [TryFrom](https://doc.rust-lang.org/std/convert/trait.TryFrom.html) `impl`, to convert the sum type back to any of its variants.²
 - `pub fn try_borrow_*t*(&self) -> Option<&T>`
 - `pub fn borrow_*t*(&self) -> &T`
 - `pub fn try_borrow_mut_*t*(&mut self) -> Option<&mut T>`
@@ -47,7 +47,8 @@ And you automatically get all the accessors you'd want^:
 
 **Note**: `*t*` is a lower_snake_case rendering of the variant identifier or type
 
-^If you want more accessors, please email me
+¹If you want more accessors (or features in general), please email me
+²Except where the variant type would be an "uncovered" generic as described [here](https://doc.rust-lang.org/error_codes/E0210.html)
 
 #### Future Plan for Accessors
 

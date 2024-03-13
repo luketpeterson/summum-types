@@ -1,3 +1,4 @@
+
 use proc_macro::TokenStream;
 use quote::quote;
 use heck::{AsUpperCamelCase, AsSnakeCase};
@@ -358,3 +359,5 @@ fn type_params_from_generics(generics: &Generics) -> Vec<&TypeParam> {
     }
     results
 }
+
+//GOAT, remember to generate an example so docs will be built
