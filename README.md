@@ -39,10 +39,10 @@ And you automatically get all the accessors you'd want¹:
 - [From](https://doc.rust-lang.org/std/convert/trait.From.html) `impl` to create the sum type from any of each of its variants
 - [TryFrom](https://doc.rust-lang.org/std/convert/trait.TryFrom.html) `impl`, to convert the sum type back to any of its variants.²
 - `pub fn is_*t*(&self) -> bool`
-- `pub fn try_borrow_*t*(&self) -> Option<&T>`
-- `pub fn borrow_*t*(&self) -> &T`
-- `pub fn try_borrow_mut_*t*(&mut self) -> Option<&mut T>`
-- `pub fn borrow_mut_*t*(&mut self) -> &mut T`
+- `pub fn try_as_*t*(&self) -> Option<&T>`
+- `pub fn as_*t*(&self) -> &T`
+- `pub fn try_as_mut_*t*(&mut self) -> Option<&mut T>`
+- `pub fn as_mut_*t*(&mut self) -> &mut T`
 - `pub fn try_into_*t*(self) -> Option<T>`
 - `pub fn into_*t*(self) -> T`
 - `pub fn SumT::variants() -> &[&str]`
@@ -56,9 +56,6 @@ And you automatically get all the accessors you'd want¹:
 
 I'd like to implement generic accessors, along the lines of: `pub fn try_into_sub<T>(self) -> Option<T>`, for example.  This would eliminate the annoyance of remembering/ guessing what identifier is assigned to a particular variant.  Unfortunately that seems to be blcoked on [this issue](https://github.com/rust-lang/rust/issues/20041) for the time being.
 
-
-GOAT, Todo
-*static type name output
 
 Conversion between union types that share overlapping sub-types
 Generic method implementation across all sub-types
@@ -92,8 +89,8 @@ summum!{
 
 Several other union type / sum type crates exist, and they might be better for your use case
 
-- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion)
-- [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type)
-- [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum)
+- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has an sweet supertype feature
+- [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type) is `no-std` and manages to do everything with declarative macros
+- [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum) is awesome for the control it gives you over the generated output and the way it supports overlapping base types beautifully.
 
-Each of them have things they do uniquely well and I took inspiration from all of them.  In particular I used `typeunion` as the basis for this crate.
+Each of them have things they do uniquely well and I took inspiration from all of them.

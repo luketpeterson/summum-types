@@ -161,10 +161,10 @@ impl SummumType {
             let sub_type = type_from_fields(&variant.fields);
 
             let is_fn_name = snake_ident("is", &variant.ident);
-            let try_borrow_fn_name = snake_ident("try_borrow", &variant.ident);
-            let borrow_fn_name = snake_ident("borrow", &variant.ident);
-            let try_borrow_mut_fn_name = snake_ident("try_borrow_mut", &variant.ident);
-            let borrow_mut_fn_name = snake_ident("borrow_mut", &variant.ident);
+            let try_as_fn_name = snake_ident("try_as", &variant.ident);
+            let as_fn_name = snake_ident("as", &variant.ident);
+            let try_as_mut_fn_name = snake_ident("try_as_mut", &variant.ident);
+            let as_mut_fn_name = snake_ident("as_mut", &variant.ident);
             let try_into_fn_name = snake_ident("try_into", &variant.ident);
             let into_fn_name = snake_ident("into", &variant.ident);
 
@@ -172,17 +172,17 @@ impl SummumType {
                 pub fn #is_fn_name(&self) -> bool {
                     match self{Self::#ident(_)=>true, _=>false}
                 }
-                pub fn #try_borrow_fn_name(&self) -> Option<&#sub_type> {
+                pub fn #try_as_fn_name(&self) -> Option<&#sub_type> {
                     match self{Self::#ident(val)=>Some(val), _=>None}
                 }
-                pub fn #borrow_fn_name(&self) -> &#sub_type {
-                    self.#try_borrow_fn_name().unwrap()
+                pub fn #as_fn_name(&self) -> &#sub_type {
+                    self.#try_as_fn_name().unwrap()
                 }
-                pub fn #try_borrow_mut_fn_name(&mut self) -> Option<&mut #sub_type> {
+                pub fn #try_as_mut_fn_name(&mut self) -> Option<&mut #sub_type> {
                     match self{Self::#ident(val)=>Some(val), _=>None}
                 }
-                pub fn #borrow_mut_fn_name(&mut self) -> &mut #sub_type {
-                    self.#try_borrow_mut_fn_name().unwrap()
+                pub fn #as_mut_fn_name(&mut self) -> &mut #sub_type {
+                    self.#try_as_mut_fn_name().unwrap()
                 }
                 pub fn #try_into_fn_name(self) -> Option<#sub_type> {
                     match self{Self::#ident(val)=>Some(val), _=>None}
@@ -234,7 +234,6 @@ impl SummumImpl {
 
         item_impl.attrs = attrs;
         let item_type_name = ident_from_type_short(&*item_impl.self_ty)?;
-        //ident_from_type_full(&*item_impl.self_ty); GOAT
 
         Ok(Self {
             item_impl,
@@ -245,7 +244,7 @@ impl SummumImpl {
     fn render(&mut self, types: &HashMap<String, SummumType>) -> TokenStream {
         let item_impl = &mut self.item_impl;
 
-        if let Some(item_type) = types.get(&self.item_type_name.to_string()) {
+        let item_type = if let Some(item_type) = types.get(&self.item_type_name.to_string()) {
             item_type
         } else {
             return quote_spanned! {
@@ -256,12 +255,21 @@ impl SummumImpl {
         for item in item_impl.items.iter_mut() {
             if let ImplItem::Fn(item) = item {
 
+                //Swap all the occurance of `self` in the block with `summum_self`
+                let block = &item.block; //GOAT do it
+
+                let match_arms = item_type.cases.iter().map(|variant| {
+                    let ident = &variant.ident;
+                    quote! {
+                        Self::#ident(summum_self) => #block
+                    }
+                }).collect::<Vec<_>>();
+
                 let new_block: Block = parse(quote!{
                     {
-                        println!("GOAT!!!!!!!!!!!!!!! This is where I need to inject a switch, and substitute self in the input block");
-                        // match self{
-                        //     Self::#ident(_)=>true, _=>false
-                        // }
+                        match self{
+                            #(#match_arms),*
+                        }
                     }
                 }.into()).unwrap();
 
@@ -293,7 +301,7 @@ impl Parse for SummumItems {
                 items.impls.push(next_impl);
             } else {
                 let next_type = SummumType::parse(input, attrs)?;
-                items.types.insert(next_type.name.to_string(), next_type);//goat dingley
+                items.types.insert(next_type.name.to_string(), next_type);
             }
         }
 
