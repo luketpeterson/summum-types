@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, ItemEnum, Fields, Variant, Ident, Token, Type, Generics, Visibility, parse};
+use syn::{parse_macro_input, Attribute, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, parse};
 use syn::spanned::Spanned;
 
 struct TypeItem {
@@ -224,6 +224,24 @@ pub fn summum(input: TokenStream) -> TokenStream {
         }
     }).collect::<Vec<_>>();
 
+    let generic_params = type_params_from_generics(&generics);
+    let try_from_impls = cases.iter().map(|variant| {
+        let ident = &variant.ident;
+        let sub_type = type_from_fields(&variant.fields);
+        if !detect_uncovered_type(&generic_params[..], &sub_type) {
+            quote! {
+                impl #generics core::convert::TryFrom<#name #generics> for #sub_type {
+                    type Error = ();
+                    fn try_from(val: #name #generics) -> Result<Self, Self::Error> {
+                        match val{#name::#ident(val)=>Ok(val), _=>Err(())}
+                    }
+                }
+            }
+        } else {
+            quote!{}
+        }
+    }).collect::<Vec<_>>();
+
     let accessor_impls = cases.iter().map(|variant| {
         let ident = &variant.ident;
         let sub_type = type_from_fields(&variant.fields);
@@ -287,6 +305,8 @@ pub fn summum(input: TokenStream) -> TokenStream {
 
         #(#from_impls)*
 
+        #(#try_from_impls)*
+
         #accessors_impl
     }
     .into()
@@ -308,4 +328,33 @@ fn type_from_fields(fields: &Fields) -> &Type {
     if let Fields::Unnamed(field) = fields {
         &field.unnamed.first().unwrap().ty
     } else {panic!()}
+}
+
+/// Detect the situation where we'd get the error: https://doc.rust-lang.org/error_codes/E0210.html
+/// `type parameter `T` must be covered by another type when it appears before the first local type...`
+fn detect_uncovered_type(generic_type_params: &[&TypeParam], item_type: &Type) -> bool {
+    match item_type {
+        Type::Path(type_path) => {
+            if let Some(type_ident) = type_path.path.get_ident() {
+                for generic_type_params in generic_type_params {
+                    if generic_type_params.ident.to_string() == type_ident.to_string() {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        Type::Reference(type_ref) => detect_uncovered_type(generic_type_params, &type_ref.elem),
+        _ => false
+    }
+}
+
+fn type_params_from_generics(generics: &Generics) -> Vec<&TypeParam> {
+    let mut results = vec![];
+    for generic_param in generics.params.iter() {
+        if let GenericParam::Type(type_param) = generic_param {
+            results.push(type_param);
+        }
+    }
+    results
 }
