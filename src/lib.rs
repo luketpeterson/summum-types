@@ -247,6 +247,7 @@ pub fn summum(input: TokenStream) -> TokenStream {
         let ident = &variant.ident;
         let sub_type = type_from_fields(&variant.fields);
 
+        let is_fn_name = snake_ident("is", &variant.ident);
         let try_borrow_fn_name = snake_ident("try_borrow", &variant.ident);
         let borrow_fn_name = snake_ident("borrow", &variant.ident);
         let try_borrow_mut_fn_name = snake_ident("try_borrow_mut", &variant.ident);
@@ -255,6 +256,9 @@ pub fn summum(input: TokenStream) -> TokenStream {
         let into_fn_name = snake_ident("into", &variant.ident);
 
         quote! {
+            pub fn #is_fn_name(&self) -> bool {
+                match self{Self::#ident(_)=>true, _=>false}
+            }
             pub fn #try_borrow_fn_name(&self) -> Option<&#sub_type> {
                 match self{Self::#ident(val)=>Some(val), _=>None}
             }
