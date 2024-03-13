@@ -1,9 +1,10 @@
 
 use proc_macro::TokenStream;
-use quote::quote;
+use proc_macro2::TokenTree;
+use quote::{quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, parse};
+use syn::{parse_macro_input, Attribute, Block, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, ItemImpl, ImplItem, Error, parse};
 use syn::spanned::Spanned;
 
 use std::collections::HashMap;
@@ -31,7 +32,7 @@ impl SummumType {
                 let _ = input.parse::<Token![as]>()?;
                 input.parse::<Ident>()?
             } else {
-                ident_from_type(&item_type)
+                ident_from_type_full(&item_type)
             };
 
             let variant: Variant = parse(quote!{ #item_ident(#item_type) }.into())?;
@@ -219,25 +220,58 @@ impl SummumType {
 }
 
 struct SummumImpl {
-    attrs: Vec<Attribute>,
-    name: Ident,
-    impl_generics: Generics,
-    type_generics: Generics,
+    item_impl: ItemImpl,
+    item_type_name: Ident,
 }
 
 impl SummumImpl {
     fn parse(input: ParseStream, attrs: Vec<Attribute>) -> Result<Self> {
-        let _ = input.parse::<Token![impl]>()?;
-        let impl_generics: Generics = input.parse()?;
-        let name = input.parse()?;
-        let type_generics: Generics = input.parse()?;
+        let mut item_impl: ItemImpl = input.parse()?;
+
+        if item_impl.trait_.is_some() {
+            return Err(Error::new(item_impl.span(), format!("impl for traits doesn't belong in summum block")));
+        }
+
+        item_impl.attrs = attrs;
+        let item_type_name = ident_from_type_short(&*item_impl.self_ty)?;
+        //ident_from_type_full(&*item_impl.self_ty); GOAT
 
         Ok(Self {
-            attrs,
-            name,
-            impl_generics,
-            type_generics,
+            item_impl,
+            item_type_name
         })
+    }
+
+    fn render(&mut self, types: &HashMap<String, SummumType>) -> TokenStream {
+        let item_impl = &mut self.item_impl;
+
+        if let Some(item_type) = types.get(&self.item_type_name.to_string()) {
+            item_type
+        } else {
+            return quote_spanned! {
+                self.item_type_name.span() => compile_error!("can't find definition for type in summum block");
+            }.into();
+        };
+
+        for item in item_impl.items.iter_mut() {
+            if let ImplItem::Fn(item) = item {
+
+                let new_block: Block = parse(quote!{
+                    {
+                        println!("GOAT!!!!!!!!!!!!!!! This is where I need to inject a switch, and substitute self in the input block");
+                        // match self{
+                        //     Self::#ident(_)=>true, _=>false
+                        // }
+                    }
+                }.into()).unwrap();
+
+                item.block = new_block;
+            }
+        }
+
+        quote!{
+            #item_impl
+        }.into()
     }
 }
 
@@ -259,7 +293,7 @@ impl Parse for SummumItems {
                 items.impls.push(next_impl);
             } else {
                 let next_type = SummumType::parse(input, attrs)?;
-                items.types.insert(next_type.name.to_string(), next_type);
+                items.types.insert(next_type.name.to_string(), next_type);//goat dingley
             }
         }
 
@@ -270,17 +304,21 @@ impl Parse for SummumItems {
 #[proc_macro]
 pub fn summum(input: TokenStream) -> TokenStream {
     let mut new_stream = TokenStream::new();
-    let items: SummumItems = parse_macro_input!(input as SummumItems);
+    let mut items: SummumItems = parse_macro_input!(input as SummumItems);
 
     for item in items.types.values() {
         new_stream.extend(item.render());
     }
 
+    for item_impl in items.impls.iter_mut() {
+        new_stream.extend(item_impl.render(&items.types));
+    }
+
     new_stream
 }
 
-
-fn ident_from_type(item_type: &Type) -> Ident {
+/// Renders the entire type, including lifetimes and generics, into a single legal identifier token
+fn ident_from_type_full(item_type: &Type) -> Ident {
     let item_ident = quote!{ #item_type }.to_string();
     let item_ident = AsUpperCamelCase(item_ident).to_string();
     Ident::new(&item_ident, item_type.span())
@@ -325,6 +363,36 @@ fn type_params_from_generics(generics: &Generics) -> Vec<&TypeParam> {
     }
     results
 }
+
+/// Helper object to parse an identifier from a compound type with generics
+struct TypeIdentParseHelper(Ident);
+
+impl Parse for TypeIdentParseHelper {
+    fn parse(input: ParseStream) -> Result<Self> {
+
+        let mut result = Err(Error::new(input.span(), format!("invalid type")));
+        while !input.is_empty() {
+            if input.peek(Ident) {
+                let ident = input.parse::<Ident>()?;
+                if result.is_err() {
+                    result = Ok(Self(ident));
+                }
+            } else {
+                _ = input.parse::<TokenTree>()?;
+            }
+        }
+
+        result
+    }
+}
+
+/// Renders the name of a type into a single legal identifier token, stripping away generics and lifetimes
+fn ident_from_type_short(item_type: &Type) -> Result<Ident> {
+    let type_stream = quote!{ #item_type }.into();
+    let ident: TypeIdentParseHelper = parse(type_stream)?;
+    Ok(ident.0)
+}
+
 
 //GOAT, remember to generate an example so docs will be built
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type

@@ -59,7 +59,6 @@ I'd like to implement generic accessors, along the lines of: `pub fn try_into_su
 
 GOAT, Todo
 *static type name output
-*see if I can break the impl up again, and go back to an attrib macro for generic impls
 
 Conversion between union types that share overlapping sub-types
 Generic method implementation across all sub-types
@@ -82,6 +81,12 @@ summum!{
                             &'a V as V;
 }
 ```
+
+### Limitations
+
+* `impl` blocks must be in the same `summum!` macro invocation where the types are defined.  This is the primary reason `summum` is not an attrib macro.  The limitation is due to [this issue](https://github.com/rust-lang/rust/issues/44034) and the work-around¹ is likely more fragile and a worse experience than just keeping the impls together.
+
+¹It's possible to implement the macro expansion in two passes where the second macro is created on the fly, folding in information from the source code.  But it's a bit of a Rube Goldberg machine.
 
 ## Acknowledgement & Other Options
 
