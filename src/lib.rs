@@ -1,10 +1,10 @@
 
 use proc_macro::TokenStream;
-use proc_macro2::TokenTree;
-use quote::{quote, quote_spanned};
+use proc_macro2::{TokenTree, Group};
+use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, Block, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, ItemImpl, ImplItem, Error, parse};
+use syn::{parse_macro_input, Attribute, Block, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, ItemImpl, ImplItem, Error, parse, parse_str};
 use syn::spanned::Spanned;
 
 use std::collections::HashMap;
@@ -255,17 +255,21 @@ impl SummumImpl {
         for item in item_impl.items.iter_mut() {
             if let ImplItem::Fn(item) = item {
 
-                //Swap all the occurance of `self` in the block with `summum_self`
-                let block = &item.block; //GOAT do it
-
                 let match_arms = item_type.cases.iter().map(|variant| {
                     let ident = &variant.ident;
+                    let sub_type = type_from_fields(&variant.fields);
+                    let sub_type_string = quote!{ < #sub_type > }.to_string();
+
+                    //Swap all the occurance of `self` and `Self` in the block
+                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[("self", "summum_self"), ("Self", &sub_type_string)]);
+                    let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
+
                     quote! {
                         Self::#ident(summum_self) => #block
                     }
                 }).collect::<Vec<_>>();
 
-                let new_block: Block = parse(quote!{
+                let new_block: Block = parse(quote_spanned!{item.block.span() =>
                     {
                         match self{
                             #(#match_arms),*
@@ -399,6 +403,39 @@ fn ident_from_type_short(item_type: &Type) -> Result<Ident> {
     let type_stream = quote!{ #item_type }.into();
     let ident: TypeIdentParseHelper = parse(type_stream)?;
     Ok(ident.0)
+}
+
+/// Do a depth-first traversal of a TokenStream replacing each ident in a map with another ident
+fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc_macro2::TokenStream {
+    let mut new_stream = proc_macro2::TokenStream::new();
+
+    for item in input.into_iter() {
+        match item {
+            TokenTree::Ident(ident) => {
+                let ident_string = ident.to_string();
+                if let Some(replacement_str) = map.iter().find_map(|(key, val)| {
+                    if key == &ident_string {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                }) {
+                    let replacement_stream = parse_str::<proc_macro2::TokenStream>(replacement_str).expect("Error rendering type back to tokens");
+                    new_stream.extend(quote_spanned!(ident.span() => #replacement_stream));
+                } else {
+                    new_stream.extend([TokenTree::Ident(ident)]);
+                }
+            },
+            TokenTree::Group(group) => {
+                let new_group_stream = replace_idents(group.stream(), map);
+                let group = Group::new(group.delimiter(), new_group_stream);
+                new_stream.extend([TokenTree::Group(group)]);
+            },
+            _ => {new_stream.extend([item]);}
+        }
+    }
+
+    new_stream
 }
 
 
