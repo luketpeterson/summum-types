@@ -269,7 +269,7 @@ impl SummumImpl {
                     }
                 }).collect::<Vec<_>>();
 
-                let new_block: Block = parse(quote_spanned!{item.block.span() =>
+                let new_block: Block = parse(quote_spanned!{item.span() =>
                     {
                         match self{
                             #(#match_arms),*
@@ -421,7 +421,9 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
                     }
                 }) {
                     let replacement_stream = parse_str::<proc_macro2::TokenStream>(replacement_str).expect("Error rendering type back to tokens");
-                    new_stream.extend(quote_spanned!(ident.span() => #replacement_stream));
+                    let replacement_stream: proc_macro2::TokenStream = replacement_stream.into_iter()
+                        .map(|mut item| {item.set_span(ident.span()); item} ).collect();
+                    new_stream.extend([replacement_stream]);
                 } else {
                     new_stream.extend([TokenTree::Ident(ident)]);
                 }
