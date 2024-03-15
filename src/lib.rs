@@ -160,13 +160,14 @@ impl SummumType {
             let ident = &variant.ident;
             let sub_type = type_from_fields(&variant.fields);
 
-            let is_fn_name = snake_ident("is", &variant.ident);
-            let try_as_fn_name = snake_ident("try_as", &variant.ident);
-            let as_fn_name = snake_ident("as", &variant.ident);
-            let try_as_mut_fn_name = snake_ident("try_as_mut", &variant.ident);
-            let as_mut_fn_name = snake_ident("as_mut", &variant.ident);
-            let try_into_fn_name = snake_ident("try_into", &variant.ident);
-            let into_fn_name = snake_ident("into", &variant.ident);
+            let ident_string = ident.to_string();
+            let is_fn_name = Ident::new(&snake_name("is", &ident_string), variant.ident.span());
+            let try_as_fn_name = Ident::new(&snake_name("try_as", &ident_string), variant.ident.span());
+            let as_fn_name = Ident::new(&snake_name("as", &ident_string), variant.ident.span());
+            let try_as_mut_fn_name = Ident::new(&snake_name("try_as_mut", &ident_string), variant.ident.span());
+            let as_mut_fn_name = Ident::new(&snake_name("as_mut", &ident_string), variant.ident.span());
+            let try_into_fn_name = Ident::new(&snake_name("try_into", &ident_string), variant.ident.span());
+            let into_fn_name = Ident::new(&snake_name("into", &ident_string), variant.ident.span());
 
             quote_spanned! {variant.span() =>
                 pub fn #is_fn_name(&self) -> bool {
@@ -258,11 +259,31 @@ impl SummumImpl {
 
                 let match_arms = item_type.cases.iter().map(|variant| {
                     let ident = &variant.ident;
+                    let ident_string = ident.to_string();
+
+                    let is_fn_name = snake_name("is", &ident_string);
+                    let try_as_fn_name = snake_name("try_as", &ident_string);
+                    let as_fn_name = snake_name("as", &ident_string);
+                    let try_as_mut_fn_name = snake_name("try_as_mut", &ident_string);
+                    let as_mut_fn_name = snake_name("as_mut", &ident_string);
+                    let try_into_fn_name = snake_name("try_into", &ident_string);
+                    let into_fn_name = snake_name("into", &ident_string);
+
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ < #sub_type > }.to_string();
 
                     //Swap all the occurance of `self` and `Self` in the block
-                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[("self", "_summum_self"), ("Self", &sub_type_string)]);
+                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
+                        ("self", "_summum_self"),
+                        ("Self", &sub_type_string),
+                        ("is_inner_t", &is_fn_name),
+                        ("try_as_inner_t", &try_as_fn_name),
+                        ("as_inner_t", &as_fn_name),
+                        ("try_as_mut_inner_t", &try_as_mut_fn_name),
+                        ("as_mut_inner_t", &as_mut_fn_name),
+                        ("try_into_inner_t", &try_into_fn_name),
+                        ("into_inner_t", &into_fn_name),
+                    ]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
 
                     quote_spanned! {item.span() =>
@@ -337,9 +358,8 @@ fn ident_from_type_full(item_type: &Type) -> Ident {
     Ident::new(&item_ident, item_type.span())
 }
 
-fn snake_ident(base: &str, ident: &Ident) -> Ident {
-    let ident_string = format!("{base}_{}", AsSnakeCase(ident.to_string()));
-    Ident::new(&ident_string, ident.span())
+fn snake_name(base: &str, ident: &str) -> String {
+    format!("{base}_{}", AsSnakeCase(ident))
 }
 
 fn type_from_fields(fields: &Fields) -> &Type {
@@ -445,3 +465,7 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
 
 //GOAT, remember to generate an example so docs will be built
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
+
+//GOAT
+// *Associated types for each variant
+// *ReadMe for `inner_t` accessors
