@@ -200,6 +200,23 @@ impl SummumType {
             }
         };
 
+        //TODO: re-enable this feature when https://github.com/rust-lang/rust/issues/8995 is available in stable
+        // let variant_type_aliases = cases.iter().map(|variant| {
+        //     let ident = &variant.ident;
+        //     let variant_type_ident = Ident::new(&format!("{}T", ident.to_string()), ident.span());
+        //     let sub_type = type_from_fields(&variant.fields);
+
+        //     quote_spanned! {variant.span() =>
+        //         pub type #variant_type_ident = #sub_type;
+        //     }
+        // }).collect::<Vec<_>>();
+        // let variant_type_aliases_impl = quote!{
+        //     #[allow(dead_code)]
+        //     impl #generics #name #generics {
+        //         #(#variant_type_aliases)*
+        //     }
+        // };
+
         quote! {
             #[allow(dead_code)]
             #(#attrs)*
@@ -214,6 +231,9 @@ impl SummumType {
             #variants_impl
 
             #accessors_impl
+
+            //TODO.  see above
+            // #variant_type_aliases_impl
 
             // #guide_type
         }.into()
@@ -467,5 +487,6 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
 
 //GOAT
-// *Associated types for each variant
 // *ReadMe for `inner_t` accessors
+// `_inner_t` specialization for outer method names.
+//    - These methods don't need self, but can have it.  Gotta handle both with and without self cases

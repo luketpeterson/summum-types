@@ -116,6 +116,8 @@ summum!{
 
 ### Limitations
 
+* This macro can generate *a lot* of code, most of which will be eliminated as dead.  If overused, this might result in degraded build times.  Also summum sum-types are probably not appropriate for exposing in a public API, but YMMV.
+
 * `impl` blocks must be in the same `summum!` macro invocation where the types are defined.  This is the primary reason `summum` is not an attrib macro.  The limitation is due to [this issue](https://github.com/rust-lang/rust/issues/44034) and the work-around¹ is likely more fragile and a worse experience than just keeping the impls together.
 
 * Each inner type should occur only once within a sum-type.  The purpose of this crate is runtime dynamism over multiple types.  If you want to multiple variants backed by the same type, then you could define type aliases.  Or you try [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum).
@@ -127,6 +129,32 @@ summum!{
 #### Abstract Method Declarations
 
 In the vein of polymorphic method dispatch, I'd like to support "trait style" method declarations without a body.  It's just syntactic sugar over the existing abstract `impl` dispatch, but it would make the declaration of an abstract sum-type with methods look much cleaner.
+
+#### Associated Types for Each Variant
+
+I'd like to add support for accessing the type of each variant through an associated type alias.  So relative to the `Num` example above, the declaration would also include `type F64T = f64`.  What's the point of that?  By itself, not much.  But combine that with the ability for another type's implementation to reference this type via shared variants, using the `::InnerT` type alias, and you can do this:
+
+```rust
+summum!{
+    enum Num {
+        F64(f64),
+        I64(i64),
+    }
+
+    enum NumVec {
+        F64(Vec<f64>),
+        I64(Vec<i64>),
+    }
+
+    impl NumVec {
+        fn get_or_default(&self, idx: usize) -> Num {
+            self.get(idx).cloned().unwrap_or_else(|| Num::InnerT::default() ).into()
+        }
+    }
+}
+```
+
+This feature is currently disabled on account of [this issue](https://github.com/rust-lang/rust/issues/8995).  Hopefully this will reach stable soon and I can re-enable it.
 
 #### Inheritance and SuperTypes
 
