@@ -490,5 +490,6 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
 
 //GOAT
 // *ReadMe for `inner_t` accessors
+// also need to swap out "InnerT" in the function signature, but not Self
 // `_inner_t` specialization for outer method names.
 //    - These methods don't need self, but can have it.  Gotta handle both with and without self cases

@@ -148,6 +148,9 @@ summum!{
     }
 
     impl NumVec {
+        fn push_inner_t(&mut self, item: Num::InnerT) {
+            self.push(item)
+        }
         fn get_or_default(&self, idx: usize) -> Num {
             self.get(idx).cloned().unwrap_or_else(|| Num::InnerT::default() ).into()
         }
@@ -157,11 +160,6 @@ summum!{
 
 This feature is currently disabled on account of [this issue](https://github.com/rust-lang/rust/issues/8995).  Hopefully this will reach stable soon and I can re-enable it.
 
-#### Inheritance and SuperTypes
-
-[typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) includes 
-inheritance and that comes with automatic conversion between some sum-types that share variants in common.  A runtime-resolving type system ought to have that kind of thing.
-
 #### Future Plan for Accessors
 
 I'd like to implement generic accessors, along the lines of: `pub fn try_into_sub<T>(self) -> Option<T>`, for example.  This would eliminate the annoyance of remembering/ guessing what identifier is assigned to a particular variant.  Unfortunately that seems to be blcoked on [this issue](https://github.com/rust-lang/rust/issues/20041) for the time being.
@@ -170,8 +168,8 @@ I'd like to implement generic accessors, along the lines of: `pub fn try_into_su
 
 Several other union type / sum type crates exist, and they might be better for your use case
 
-- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has an sweet supertype feature
-- [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type) is `no-std` and manages to do everything with declarative macros
+- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has an sweet supertype feature for automatic conversions between types with variants in common.
+- [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type) is `no-std` and manages to do everything with declarative macros.  Also it supports downcasting for variant types that can implement the `Any` trait.
 - [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum) is awesome for the control it gives you over the generated output and the way it supports overlapping base types beautifully.
 
 Each of them have things they do uniquely well and I took inspiration from all of them.
