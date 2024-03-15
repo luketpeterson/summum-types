@@ -91,6 +91,12 @@ summum!{
 
 Yes, all abstract methods need `&self` to know which variant type to use.  You can also implement ordinary methods on the type *outside* the `summum` invocation.
 
+### Polymorphism
+
+One of the uses for sum-type enums is to fill a similar role to `dyn` trait objects in polymorphic method dispatch.  Sum-type enums provide different design constraints, such as being `Sized` and not requiring object safety.  Unlike the [Any trait](https://doc.rust-lang.org/std/any/index.html) in particular, summum types provide a method to recover ownership of the original type, and allowing internal lifetimes (no `'static` bound).
+
+Sum-types are certainly not a replacement for dynamic dispatch in every case, but hopefully they will be another tool to reach for when it's convenient.
+
 ### Bonus Syntax: Haskell / TypeScript Style
 
 If you're into the whole brevity thing, you can write: 
@@ -116,11 +122,9 @@ summum!{
 
 ### Future Work
 
-#### Abstract Methods
+#### Abstract Method Declarations
 
-One of the uses for sum-type enums is to fill a similar role to `dyn` trait objects in polymorphic method dispatch.  Sum-type enums provide different design constraints, such as being `Sized`, not requiring object safety, providing a method to recover ownership of the original type, and allowing internal lifetimes.  They're certainly not a replacement for dynamic dispatch in every case, but hopefully they will be another tool to reach for when it's convenient.
-
-To that end, I'd like to support "trait style" method declarations without a body.  It's just syntactic sugar over the existing abstract `impl` dispatch, but it would make the declaration of an abstract sum-type with methods look much cleaner.
+In the vein of polymorphic method dispatch, I'd like to support "trait style" method declarations without a body.  It's just syntactic sugar over the existing abstract `impl` dispatch, but it would make the declaration of an abstract sum-type with methods look much cleaner.
 
 #### Inheritance and SuperTypes
 

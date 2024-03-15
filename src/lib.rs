@@ -101,7 +101,7 @@ impl SummumType {
             let ident = &variant.ident;
             let sub_type = type_from_fields(&variant.fields);
 
-            quote! {
+            quote_spanned! {variant.span() =>
                 impl #generics From<#sub_type> for #name #generics {
                     fn from(val: #sub_type) -> Self {
                         #name::#ident(val)
@@ -130,7 +130,7 @@ impl SummumType {
 
         let variants_strs = cases.iter().map(|variant| {
             let ident_string = &variant.ident.to_string();
-            quote! {
+            quote_spanned! {variant.span() =>
                 #ident_string
             }
         }).collect::<Vec<_>>();
@@ -168,7 +168,7 @@ impl SummumType {
             let try_into_fn_name = snake_ident("try_into", &variant.ident);
             let into_fn_name = snake_ident("into", &variant.ident);
 
-            quote! {
+            quote_spanned! {variant.span() =>
                 pub fn #is_fn_name(&self) -> bool {
                     match self{Self::#ident(_)=>true, _=>false}
                 }
@@ -214,8 +214,7 @@ impl SummumType {
             #accessors_impl
 
             // #guide_type
-        }
-        .into()
+        }.into()
     }
 }
 
@@ -252,6 +251,7 @@ impl SummumImpl {
             }.into();
         };
 
+        let impl_span = item_impl.span();
         for item in item_impl.items.iter_mut() {
             if let ImplItem::Fn(item) = item {
 
@@ -264,7 +264,7 @@ impl SummumImpl {
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[("self", "summum_self"), ("Self", &sub_type_string)]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
 
-                    quote! {
+                    quote_spanned! {item.span() =>
                         Self::#ident(summum_self) => #block
                     }
                 }).collect::<Vec<_>>();
@@ -281,7 +281,7 @@ impl SummumImpl {
             }
         }
 
-        quote!{
+        quote_spanned!{impl_span =>
             #item_impl
         }.into()
     }
@@ -430,8 +430,9 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
             },
             TokenTree::Group(group) => {
                 let new_group_stream = replace_idents(group.stream(), map);
-                let group = Group::new(group.delimiter(), new_group_stream);
-                new_stream.extend([TokenTree::Group(group)]);
+                let mut new_group = Group::new(group.delimiter(), new_group_stream);
+                new_group.set_span(group.span());
+                new_stream.extend([TokenTree::Group(new_group)]);
             },
             _ => {new_stream.extend([item]);}
         }
