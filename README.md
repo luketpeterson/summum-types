@@ -8,6 +8,7 @@ This crate strives to provide dynamic runtime-resolving types on top of Rust’s
 The `summum` macro allows for easy declaration of sum-types that:
 - come with all the traits and methods you'd expect for conversion and access
 - allow generic method implementation across all variants
+- support interoperability across multiple types via shared variant names
 <!-- - support abstract interfaces to delegate to sub-type methods -->
 
 ### Motivation

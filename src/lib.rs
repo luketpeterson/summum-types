@@ -280,6 +280,7 @@ impl SummumImpl {
                 let match_arms = item_type.cases.iter().map(|variant| {
                     let ident = &variant.ident;
                     let ident_string = ident.to_string();
+                    let inner_t_name = format!("{}T", ident_string);
 
                     let is_fn_name = snake_name("is", &ident_string);
                     let try_as_fn_name = snake_name("try_as", &ident_string);
@@ -296,6 +297,7 @@ impl SummumImpl {
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
                         ("self", "_summum_self"),
                         ("Self", &sub_type_string),
+                        ("InnerT", &inner_t_name),
                         ("is_inner_t", &is_fn_name),
                         ("try_as_inner_t", &try_as_fn_name),
                         ("as_inner_t", &as_fn_name),
