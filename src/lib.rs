@@ -193,6 +193,7 @@ impl SummumType {
             }
         }).collect::<Vec<_>>();
         let accessors_impl = quote!{
+            #[allow(dead_code)]
             impl #generics #name #generics {
                 #(#accessor_impls)*
             }
@@ -261,11 +262,11 @@ impl SummumImpl {
                     let sub_type_string = quote!{ < #sub_type > }.to_string();
 
                     //Swap all the occurance of `self` and `Self` in the block
-                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[("self", "summum_self"), ("Self", &sub_type_string)]);
+                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[("self", "_summum_self"), ("Self", &sub_type_string)]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
 
                     quote_spanned! {item.span() =>
-                        Self::#ident(summum_self) => #block
+                        Self::#ident(_summum_self) => #block
                     }
                 }).collect::<Vec<_>>();
 
