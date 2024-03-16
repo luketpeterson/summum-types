@@ -57,7 +57,7 @@ And you automatically get all the accessors you'd want¹:
 
 ### Generic method impl dispatch
 
-You can also add method `impl` blocks, to implement functionality shared across every variant within your sum-type.  This expands to a match statement on `&self`, where `&self` is remapped to a local variable if the inner variant type.  For example:
+You can also add method `impl` blocks, to implement functionality shared across every variant within your sum-type.  This expands to a match statement on `&self`, where `&self` is remapped to a local variable of the inner variant type.  For example:
 
 ```rust
 summum!{
@@ -75,7 +75,9 @@ summum!{
 }
 ```
 
-You can also use `Self` as a local type alias that expands to the variant type.  Also `InnerT` is an alias to the concrete type of the variant being expanded.  If your method is returning `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
+You can also use `Self` as a local type alias that expands to the variant's type.  Additionally `InnerT` serves the same purpose.  Within a function body, `Self` and `InnerT` are the same, but `Self` will never be re-mapped on a function signature.
+
+If your method returns `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
 
 ```rust
 summum!{
@@ -92,9 +94,9 @@ summum!{
 }
 ```
 
-Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specialized Method* (keep reading) for constructors and other places where you don't want a `self` argument.
+Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specialized Method* (keep reading...) for constructors and other places where you don't want a `self` argument.
 
-Of course uou can also implement ordinary methods on the sub-type *outside* the `summum` invocation, where these rules don't apply.
+Of course you can also implement ordinary methods on the sub-type *outside* the `summum` invocation, where these behaviors don't apply.
 
 ### Variant Specialized Methods
 
@@ -153,8 +155,8 @@ summum!{
 
     impl NumVec {
         fn push(&mut self, item: Num) {
-            // This will be replaced with either `into_f64` or `into_i64` depending
-            // on the variant branch being generated
+            // This will be replaced with either `into_f64` or `into_i64`,
+            // depending on the variant branch being generated
             let val = item.into_inner_var();
             self.push(val);
         }
@@ -185,7 +187,7 @@ summum!{
 
 * `impl` blocks must be in the same `summum!` macro invocation where the types are defined.  This is the primary reason `summum` is not an attrib macro.  The limitation is due to [this issue](https://github.com/rust-lang/rust/issues/44034) and the work-around¹ is likely more fragile and a worse experience than just keeping the impls together.
 
-* Each inner type should occur only once within a sum-type.  The purpose of this crate is runtime dynamism over multiple types.  If you want to multiple variants backed by the same type, then you could define type aliases.  Or try [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum).
+* Each inner type should occur only once within a sum-type.  The purpose of this crate is runtime dynamism over multiple types.  If you want to create multiple variants backed by the same type, then you could define type aliases.  Or try [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum).
 
 ¹It's possible to implement the macro expansion in two passes where the second macro is created on the fly, folding in information from the source code.  But it's a bit of a Rube Goldberg machine.
 
