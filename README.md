@@ -73,7 +73,7 @@ summum!{
 }
 ```
 
-You can also use `Self` as a local type alias that expands to the variant type.  If you're returning `Self`, you'll need to remember to use the `.into()` conversion.  Like this:
+You can also use `Self` as a local type alias that expands to the variant type.  Also `InnerT` is an alias to the concrete type of the variant being expanded.  If your method is returning `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
 
 ```rust
 summum!{
@@ -114,6 +114,18 @@ summum!{
 ```
 
 You can also pass `self` as an argument to variant-specialized methods.  Be warned, however, if the inner type of `self` doesn't agree with the method variant then the method will panic!
+
+Within a variant-specialized method, you can use `InnerT` in the function signature, for both arguments and the method return type.  For example:
+
+```rust
+    //Within the `summum` invocation above...
+
+    impl Num {
+        fn multiply_add_one_inner_var(&self, multiplier: InnerT) -> InnerT {
+            *self * multiplier + 1 as InnerT
+        }
+    }
+```
 
 ### Polymorphism
 
@@ -183,7 +195,7 @@ In the vein of polymorphic method dispatch, I'd like to support "trait style" me
 
 #### Associated Types for Each Variant
 
-I'd like to add support for accessing the type of each variant through an associated type alias.  So relative to the `Num` example above, the declaration would also include `type F64T = f64`.  What's the point of that?  By itself, not much.  But combine that with the ability for another type's implementation to reference this type via shared variants, using the `::InnerT` type alias, and you can do this:
+I'd like to add support for accessing the type of each variant through an associated type alias.  So relative to the `Num` example above, the declaration would also include `type F64T = f64`.  What's the point of that?  By itself, not much.  But combine that with the ability for another type's implementation to reference this type via shared variants, using the `::VariantT` type alias, and you can do this:
 
 ```rust
 summum!{
@@ -198,11 +210,11 @@ summum!{
     }
 
     impl NumVec {
-        fn push_inner_var(&mut self, item: Num::InnerT) {
+        fn push_inner_var(&mut self, item: Num::VariantT) {
             self.push(item)
         }
         fn get_or_default(&self, idx: usize) -> Num {
-            self.get(idx).cloned().unwrap_or_else(|| Num::InnerT::default() ).into()
+            self.get(idx).cloned().unwrap_or_else(|| Num::VariantT::default() ).into()
         }
     }
 }

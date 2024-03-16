@@ -283,16 +283,17 @@ impl SummumImpl {
                 let variant_blocks = item_type.cases.iter().map(|variant| {
                     let ident = &variant.ident;
                     let ident_string = ident.to_string();
-                    let inner_t_name = format!("{}T", ident_string);
+                    let variant_t_name = format!("{}T", ident_string);
 
                     let sub_type = type_from_fields(&variant.fields);
-                    let sub_type_string = quote!{ < #sub_type > }.to_string();
+                    let sub_type_string = quote!{ #sub_type }.to_string();
 
                     //Swap all the occurance of `self`, `Self`, etc. in the block
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
                         ("self", "_summum_self"),
                         ("Self", &sub_type_string),
-                        ("InnerT", &inner_t_name),
+                        ("VariantT", &variant_t_name),
+                        ("InnerT", &sub_type_string),
                     ], &[
                         ("_inner_var", &|base| snake_name(base, &ident_string))
                     ]);
@@ -312,6 +313,16 @@ impl SummumImpl {
                         let ident_string = ident.to_string();
                         let new_method_name = snake_name(base_fn_name, &ident_string);
                         new_item.sig.ident = Ident::new(&new_method_name, item.sig.ident.span());
+
+                        //Swap out `VariantT` and `InnerT` in the method signature and return value
+                        let variant_t_name = format!("{}T", ident_string);
+                        let sub_type = type_from_fields(&variant.fields);
+                        let sub_type_string = quote!{ #sub_type }.to_string();
+                        let sig_tokenstream = replace_idents(new_item.sig.to_token_stream(), &[
+                            ("VariantT", &variant_t_name),
+                            ("InnerT", &sub_type_string),
+                        ], &[]);
+                        new_item.sig = parse(quote_spanned!{item.sig.span() => #sig_tokenstream }.into()).expect("Error replacing signature types");
 
                         //If we have a `self` input arg
                         new_item.block = if sig_contains_self_arg(&new_item.sig) {
@@ -479,7 +490,7 @@ fn ident_from_type_short(item_type: &Type) -> Result<Ident> {
 }
 
 /// Do a depth-first traversal of a TokenStream replacing each ident in a map with another ident
-fn replace_idents<F: Fn(&str) -> String>(input: proc_macro2::TokenStream, map: &[(&str, &str)], ends_with_map: &[(&str, &F)]) -> proc_macro2::TokenStream {
+fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)], ends_with_map: &[(&str, &dyn Fn(&str) -> String)]) -> proc_macro2::TokenStream {
     let mut new_stream = proc_macro2::TokenStream::new();
 
     for item in input.into_iter() {
@@ -533,6 +544,3 @@ fn sig_contains_self_arg(sig: &Signature) -> bool {
 
 //GOAT, remember to generate an example so docs will be built
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
-
-//GOAT
-// need to swap out "InnerT" in the function signature (params and return value), but not Self
