@@ -50,6 +50,8 @@ And you automatically get all the accessors you'd want¹:
 
 **Note**: `*t*` is a lower_snake_case rendering of the variant identifier
 
+<!-- The `generated_example` feature flag will create an example type named `GeneratedExample` which can be viewed using `rustdoc`. -->
+
 ¹If you want more accessors (or features in general), please email me  
 ²Except where the variant type would be an "uncovered" generic as described [here](https://doc.rust-lang.org/error_codes/E0210.html)  
 

@@ -14,7 +14,13 @@ proc-macro = true
 [dependencies]
 quote = "1.0.33"
 proc-macro2 = "1.0.79"
-syn = { version = "2.0.52", features = ["full", "extra-traits"] }
+syn = { version = "2.0.52", features = ["full"] }
 heck = "0.4.1"
 
-#GOAT, remove "extra-traits" syn feature
+[features]
+default = []
+
+#TODO: I want to show examples of all the features... but alas I'd need a separate
+# crate to actually publish them on docs.rs.  And I want to keep to a single crate.
+#generated_example = []
+

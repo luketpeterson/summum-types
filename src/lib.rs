@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
 use proc_macro2::{TokenTree, Group};
@@ -398,6 +399,7 @@ impl Parse for SummumItems {
     }
 }
 
+/// See the crate's top-level for usage docs
 #[proc_macro]
 pub fn summum(input: TokenStream) -> TokenStream {
     let mut new_stream = TokenStream::new();
@@ -542,5 +544,35 @@ fn sig_contains_self_arg(sig: &Signature) -> bool {
     false
 }
 
-//GOAT, remember to generate an example so docs will be built
-//GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
+/// An example of a generated sum type
+#[cfg(feature = "generated_example")]
+#[allow(missing_docs)]
+pub mod generated_example {
+    use crate::summum;
+    summum! {
+        /// An example type generated with the invocation:
+        ///
+        /// ```
+        /// DocCEPTION!!
+        /// ```
+        #[derive(Debug, Copy, Clone, PartialEq)]
+        enum GeneratedExample<'a, T> {
+            Slice(&'a [T]),
+            Vec(Vec<T>),
+        }
+
+        impl<'a, T> SliceOrPie<'a, T> {
+            /// Returns a reference to the `T` as `idx`
+            fn get(&self, idx: usize) -> Option<&T> {
+                self.get(idx)
+            }
+
+            //TODO: I want to show examples of all the features... but alas I'd need a separate
+            // crate to actually publish them on docs.rs.  And I want to keep to a single crate.
+        }
+    }
+}
+
+//TODO, Make sure overlapping types shared by different variants are handled nicely.
+//Maybe add an attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type,
+//or at the very least make a nice error
