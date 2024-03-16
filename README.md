@@ -98,7 +98,7 @@ One of the uses for sum-type enums is to fill a similar role to `dyn` trait obje
 
 Sum-types are certainly not a replacement for dynamic dispatch in every case, but hopefully they will be another tool to reach for when it's convenient.
 
-### Generic Variant Substitution in Method Calls for Interoperation Across Types
+### Variant Substitution in Method Calls for Interoperation Across Types
 
 Consider multiple types that interact with each other like in the example below.  Sometimes we need to interact with a related type in a way that depends on which variant we're generating.  In those cases, we can call the synthesized variant-specific functions of other types, as long as the variant names of the `impl` type are a superset of the type being called.
 
@@ -193,10 +193,10 @@ I'd like to implement generic accessors, along the lines of: `pub fn try_into_su
 
 ## Acknowledgement & Other Options
 
-Several other union type / sum type crates exist, and they might be better for your use case
+Several other union type / sum type crates exist, and one of them might be better for your use case.  Each has things they do uniquely well and I took inspiration from all of them.
 
 - [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has an sweet supertype feature for automatic conversions between types with variants in common.
 - [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type) is `no-std` and manages to do everything with declarative macros.  Also it supports downcasting for variant types that can implement the `Any` trait.
-- [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum) is awesome for the control it gives you over the generated output and the way it supports overlapping base types beautifully.
+- [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum) is awesome for the control it gives you over the generated output and the way it supports overlapping base types beautifully.  It'll cope much better if you plan to have a silly number of variants.
 
-Each of them have things they do uniquely well and I took inspiration from all of them.
+Finally, thank you for looking at this crate.  If you have ideas and/or feedback, please let me know, either via email or with a GitHub issue.

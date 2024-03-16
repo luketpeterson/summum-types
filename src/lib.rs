@@ -4,7 +4,7 @@ use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse_macro_input, Attribute, Block, ItemEnum, Fields, Variant, GenericParam, TypeParam, Ident, Token, Type, Generics, Visibility, ItemImpl, ImplItem, Error, parse, parse_str};
+use syn::{parse, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, Signature, Token, Type, TypeParam, Variant, Visibility};
 use syn::spanned::Spanned;
 
 use std::collections::HashMap;
@@ -274,16 +274,16 @@ impl SummumImpl {
         };
 
         let impl_span = item_impl.span();
-        for item in item_impl.items.iter_mut() {
-            if let ImplItem::Fn(item) = item {
+        let items = core::mem::take(&mut item_impl.items);
+        let mut new_items = vec![];
+        for item in items.into_iter() {
+            if let ImplItem::Fn(mut item) = item {
 
-                let match_arms = item_type.cases.iter().map(|variant| {
+                //Create a specialized version of the function body for each variant
+                let variant_blocks = item_type.cases.iter().map(|variant| {
                     let ident = &variant.ident;
                     let ident_string = ident.to_string();
                     let inner_t_name = format!("{}T", ident_string);
-
-                    //GOAT, working here
-                    let item_fn_name = item.sig.ident.to_string();
 
                     let is_fn_name = snake_name("is", &ident_string);
                     let try_as_fn_name = snake_name("try_as", &ident_string);
@@ -310,23 +310,63 @@ impl SummumImpl {
                         ("into_inner_var", &into_fn_name),
                     ]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
-
-                    quote_spanned! {item.span() =>
-                        Self::#ident(_summum_self) => #block
-                    }
+                    block
                 }).collect::<Vec<_>>();
 
-                let new_block: Block = parse(quote_spanned!{item.span() =>
-                    {
-                        match self{
-                            #(#match_arms),*
-                        }
-                    }
-                }.into()).unwrap();
+                //If the method name ends with "inner_var" then we'll generate a method for each variant
+                let item_fn_name = item.sig.ident.to_string();
+                if item_fn_name.ends_with("_inner_var") {
+                    let base_fn_name = &item_fn_name[0..(item_fn_name.len() - "_inner_var".len())];
+                    for (variant, block) in item_type.cases.iter().zip(variant_blocks) {
+                        let mut new_item = item.clone();
 
-                item.block = new_block;
+                        let item_type_name = self.item_type_name.to_string();
+                        let ident = &variant.ident;
+                        let ident_string = ident.to_string();
+                        let new_method_name = snake_name(base_fn_name, &ident_string);
+                        new_item.sig.ident = Ident::new(&new_method_name, item.sig.ident.span());
+
+                        //If we have a `self` input arg
+                        new_item.block = if sig_contains_self_arg(&new_item.sig) {
+                            parse(quote_spanned!{item.span() =>
+                                {
+                                    match self{
+                                        Self::#ident(_summum_self) => #block ,
+                                        _ => panic!("`{}::{}` method must be called with corresponding inner type", #item_type_name, #new_method_name)
+                                    }
+                                }
+                            }.into()).unwrap()
+                        } else {
+                            block
+                        };
+
+                        new_items.push(ImplItem::Fn(new_item));
+                    }
+
+                } else {
+
+                    //If the method name doesn't end with "inner_var", we'll generate just one method
+                    let match_arms = item_type.cases.iter().zip(variant_blocks).map(|(variant, block)| {
+                        let ident = &variant.ident;
+                        quote_spanned! {item.span() =>
+                            Self::#ident(_summum_self) => #block
+                        }
+                    }).collect::<Vec<_>>();
+
+                    item.block = parse(quote_spanned!{item.span() =>
+                        {
+                            match self{
+                                #(#match_arms),*
+                            }
+                        }
+                    }.into()).unwrap();
+                    new_items.push(ImplItem::Fn(item));
+                }
+            } else {
+                new_items.push(item);
             }
         }
+        item_impl.items = new_items;
 
         quote_spanned!{impl_span =>
             #item_impl
@@ -487,11 +527,18 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
     new_stream
 }
 
+fn sig_contains_self_arg(sig: &Signature) -> bool {
+    if let Some(first_arg) = sig.inputs.first() {
+        if let FnArg::Receiver(_rcvr) = first_arg {
+            return true;
+        }
+    }
+    false
+}
 
 //GOAT, remember to generate an example so docs will be built
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
 
 //GOAT
-// also need to swap out "InnerT" in the function signature (params and return value), but not Self
-// `_inner_var` specialization for outer method names.
-//    - These methods don't need self, but can have it.  Gotta handle both with and without self cases
+// need to swap out "InnerT" in the function signature (params and return value), but not Self
+// ReadMe entry for `_inner_var` outer methods
