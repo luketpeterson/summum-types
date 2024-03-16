@@ -285,14 +285,6 @@ impl SummumImpl {
                     let ident_string = ident.to_string();
                     let inner_t_name = format!("{}T", ident_string);
 
-                    let is_fn_name = snake_name("is", &ident_string);
-                    let try_as_fn_name = snake_name("try_as", &ident_string);
-                    let as_fn_name = snake_name("as", &ident_string);
-                    let try_as_mut_fn_name = snake_name("try_as_mut", &ident_string);
-                    let as_mut_fn_name = snake_name("as_mut", &ident_string);
-                    let try_into_fn_name = snake_name("try_into", &ident_string);
-                    let into_fn_name = snake_name("into", &ident_string);
-
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ < #sub_type > }.to_string();
 
@@ -301,13 +293,8 @@ impl SummumImpl {
                         ("self", "_summum_self"),
                         ("Self", &sub_type_string),
                         ("InnerT", &inner_t_name),
-                        ("is_inner_var", &is_fn_name),
-                        ("try_as_inner_var", &try_as_fn_name),
-                        ("as_inner_var", &as_fn_name),
-                        ("try_as_mut_inner_var", &try_as_mut_fn_name),
-                        ("as_mut_inner_var", &as_mut_fn_name),
-                        ("try_into_inner_var", &try_into_fn_name),
-                        ("into_inner_var", &into_fn_name),
+                    ], &[
+                        ("_inner_var", &|base| snake_name(base, &ident_string))
                     ]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
                     block
@@ -492,21 +479,29 @@ fn ident_from_type_short(item_type: &Type) -> Result<Ident> {
 }
 
 /// Do a depth-first traversal of a TokenStream replacing each ident in a map with another ident
-fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc_macro2::TokenStream {
+fn replace_idents<F: Fn(&str) -> String>(input: proc_macro2::TokenStream, map: &[(&str, &str)], ends_with_map: &[(&str, &F)]) -> proc_macro2::TokenStream {
     let mut new_stream = proc_macro2::TokenStream::new();
 
     for item in input.into_iter() {
         match item {
             TokenTree::Ident(ident) => {
                 let ident_string = ident.to_string();
-                if let Some(replacement_str) = map.iter().find_map(|(key, val)| {
+                if let Some(replacement_string) = map.iter().find_map(|(key, val)| {
                     if key == &ident_string {
-                        Some(val)
+                        Some(val.to_string())
                     } else {
                         None
                     }
+                }).or_else(|| {
+                    ends_with_map.iter().find_map(|(ends_with_key, func)| {
+                        if ident_string.ends_with(ends_with_key) {
+                            Some(func(&ident_string[0..(ident_string.len() - ends_with_key.len())]))
+                        } else {
+                            None
+                        }
+                    })
                 }) {
-                    let replacement_stream = parse_str::<proc_macro2::TokenStream>(replacement_str).expect("Error rendering type back to tokens");
+                    let replacement_stream = parse_str::<proc_macro2::TokenStream>(&replacement_string).expect("Error rendering type back to tokens");
                     let replacement_stream: proc_macro2::TokenStream = replacement_stream.into_iter()
                         .map(|mut item| {item.set_span(ident.span()); item} ).collect();
                     new_stream.extend([replacement_stream]);
@@ -515,7 +510,7 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
                 }
             },
             TokenTree::Group(group) => {
-                let new_group_stream = replace_idents(group.stream(), map);
+                let new_group_stream = replace_idents(group.stream(), map, ends_with_map);
                 let mut new_group = Group::new(group.delimiter(), new_group_stream);
                 new_group.set_span(group.span());
                 new_stream.extend([TokenTree::Group(new_group)]);
@@ -541,4 +536,3 @@ fn sig_contains_self_arg(sig: &Signature) -> bool {
 
 //GOAT
 // need to swap out "InnerT" in the function signature (params and return value), but not Self
-// `_inner_var` call-site substitution needs to be generalized beyond built-in methods
