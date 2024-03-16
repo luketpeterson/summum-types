@@ -282,6 +282,9 @@ impl SummumImpl {
                     let ident_string = ident.to_string();
                     let inner_t_name = format!("{}T", ident_string);
 
+                    //GOAT, working here
+                    let item_fn_name = item.sig.ident.to_string();
+
                     let is_fn_name = snake_name("is", &ident_string);
                     let try_as_fn_name = snake_name("try_as", &ident_string);
                     let as_fn_name = snake_name("as", &ident_string);
@@ -293,18 +296,18 @@ impl SummumImpl {
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ < #sub_type > }.to_string();
 
-                    //Swap all the occurance of `self` and `Self` in the block
+                    //Swap all the occurance of `self`, `Self`, etc. in the block
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
                         ("self", "_summum_self"),
                         ("Self", &sub_type_string),
                         ("InnerT", &inner_t_name),
-                        ("is_inner_t", &is_fn_name),
-                        ("try_as_inner_t", &try_as_fn_name),
-                        ("as_inner_t", &as_fn_name),
-                        ("try_as_mut_inner_t", &try_as_mut_fn_name),
-                        ("as_mut_inner_t", &as_mut_fn_name),
-                        ("try_into_inner_t", &try_into_fn_name),
-                        ("into_inner_t", &into_fn_name),
+                        ("is_inner_var", &is_fn_name),
+                        ("try_as_inner_var", &try_as_fn_name),
+                        ("as_inner_var", &as_fn_name),
+                        ("try_as_mut_inner_var", &try_as_mut_fn_name),
+                        ("as_mut_inner_var", &as_mut_fn_name),
+                        ("try_into_inner_var", &try_into_fn_name),
+                        ("into_inner_var", &into_fn_name),
                     ]);
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
 
@@ -489,7 +492,6 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)]) -> proc
 //GOAT, attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type
 
 //GOAT
-// *ReadMe for `inner_t` accessors
-// also need to swap out "InnerT" in the function signature, but not Self
-// `_inner_t` specialization for outer method names.
+// also need to swap out "InnerT" in the function signature (params and return value), but not Self
+// `_inner_var` specialization for outer method names.
 //    - These methods don't need self, but can have it.  Gotta handle both with and without self cases

@@ -98,6 +98,33 @@ One of the uses for sum-type enums is to fill a similar role to `dyn` trait obje
 
 Sum-types are certainly not a replacement for dynamic dispatch in every case, but hopefully they will be another tool to reach for when it's convenient.
 
+### Generic Variant Substitution in Method Calls for Interoperation Across Types
+
+Consider multiple types that interact with each other like in the example below.  Sometimes we need to interact with a related type in a way that depends on which variant we're generating.  In those cases, we can call the synthesized variant-specific functions of other types, as long as the variant names of the `impl` type are a superset of the type being called.
+
+```rust
+summum!{
+    enum Num {
+        F64(f64),
+        I64(i64),
+    }
+
+    enum NumVec {
+        F64(Vec<f64>),
+        I64(Vec<i64>),
+    }
+
+    impl NumVec {
+        fn push(&mut self, item: Num) {
+            // This will be replaced with either `into_f64` or `into_i64` depending
+            // on the variant branch being generated
+            let val = item.into_inner_var();
+            self.push(val);
+        }
+    }
+}
+```
+
 ### Bonus Syntax: Haskell / TypeScript Style
 
 If you're into the whole brevity thing, you can write: 
@@ -148,7 +175,7 @@ summum!{
     }
 
     impl NumVec {
-        fn push_inner_t(&mut self, item: Num::InnerT) {
+        fn push_inner_var(&mut self, item: Num::InnerT) {
             self.push(item)
         }
         fn get_or_default(&self, idx: usize) -> Num {
