@@ -541,4 +541,4 @@ fn sig_contains_self_arg(sig: &Signature) -> bool {
 
 //GOAT
 // need to swap out "InnerT" in the function signature (params and return value), but not Self
-// ReadMe entry for `_inner_var` outer methods
+// `_inner_var` call-site substitution needs to be generalized beyond built-in methods

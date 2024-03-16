@@ -1,5 +1,5 @@
 # summum-types
-A sum-type macro crate with all the conversion, accessors and support for abstract methods across variants
+A sum-type macro crate with all the conversion, accessors and support for abstract methods across variants, and interoperability between sum-types
 
 ## Summary
 
@@ -90,7 +90,30 @@ summum!{
 }
 ```
 
-Yes, all abstract methods need `&self` to know which variant type to use.  You can also implement ordinary methods on the type *outside* the `summum` invocation.
+Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specialized Method* (keep reading) for constructors and other places where you don't want a `self` argument.
+
+Of course uou can also implement ordinary methods on the sub-type *outside* the `summum` invocation, where these rules don't apply.
+
+### Variant Specialized Methods
+
+Sometimes you need to generate an explicit method for each variant.  `summum` has you covered.  Just end a method name with `"_inner_var"` and it will be replaced by a separate method for each variant.  For example, the code below will lead to the generation of a the `max_f64` and `max_i64` methods.
+
+```rust
+summum!{
+    enum Num {
+        F64(f64),
+        I64(i64),
+    }
+
+    impl Num {
+        fn max_inner_var() -> Self {
+            Self::MAX.into()
+        }
+    }
+}
+```
+
+You can also pass `self` as an argument to variant-specialized methods.  Be warned, however, if the inner type of `self` doesn't agree with the method variant then the method will panic!
 
 ### Polymorphism
 
