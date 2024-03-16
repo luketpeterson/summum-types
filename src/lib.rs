@@ -1,5 +1,12 @@
 #![doc = include_str!("../README.md")]
 
+//TODO: no_std will be a project for later
+// #![no_std]
+extern crate alloc;
+use alloc::vec::Vec;
+use alloc::string::String;
+use std::collections::HashMap;
+
 use proc_macro::TokenStream;
 use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
@@ -7,8 +14,6 @@ use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{parse, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, Signature, Token, Type, TypeParam, Variant, Visibility};
 use syn::spanned::Spanned;
-
-use std::collections::HashMap;
 
 struct SummumType {
     attrs: Vec<Attribute>,

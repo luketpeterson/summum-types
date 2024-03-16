@@ -1,12 +1,14 @@
 [package]
 name = "summum-types"
-description = "Sum Type macro with all the features"
-keywords = ["macro", "type-union", "sum-type", "union-type", "enum"]
-authors = ["Luke Peterson <luketpeterson@gmail.com>"]
-repository = "https://github.com/luketpeterson/summum-types"
 version = "0.1.0"
 edition = "2021"
+authors = ["Luke Peterson <luketpeterson@gmail.com>"]
 license = "MIT OR Apache-2.0"
+description = "A sum-type macro crate with all the conversions, accessors, and support for abstract methods across variants, and interoperability between sum-types"
+repository = "https://github.com/luketpeterson/summum-types"
+readme = "README.md"
+keywords = ["macro", "type-union", "sum-type", "union-type", "enum"]
+categories = ["rust-patterns", "algorithms", "data-structures", ]
 
 [lib]
 proc-macro = true
