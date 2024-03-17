@@ -75,9 +75,7 @@ summum!{
 }
 ```
 
-You can also use `Self` as a local type alias that expands to the variant's type.  Additionally `InnerT` serves the same purpose.  Within a function body, `Self` and `InnerT` are the same, but `Self` will never be re-mapped on a function signature.
-
-If your method returns `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
+You can also use `InnerT` as a local type alias that expands to the variant's inner type.  `Self` will continue to refer to the whole outer type.  If your method returns `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
 
 ```rust
 summum!{
@@ -88,7 +86,7 @@ summum!{
 
     impl Num {
         fn max_of_type(&self) -> Self {
-            Self::MAX.into()
+            InnerT::MAX.into()
         }
     }
 }
@@ -111,7 +109,7 @@ summum!{
 
     impl Num {
         fn max_inner_var() -> Self {
-            Self::MAX.into()
+            InnerT::MAX.into()
         }
     }
 }

@@ -303,10 +303,9 @@ impl SummumImpl {
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ #sub_type }.to_string();
 
-                    //Swap all the occurance of `self`, `Self`, etc. in the block
+                    //Swap all the occurance of `self`, etc. in the block
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
                         ("self", "_summum_self"),
-                        ("Self", &sub_type_string),
                         ("VariantT", &variant_t_name),
                         ("InnerT", &sub_type_string),
                     ], &[
