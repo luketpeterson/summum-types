@@ -162,6 +162,40 @@ summum!{
 }
 ```
 
+### Restrict and Exclude Control Directives
+
+Sometimes a branch of a confitional just doesn't make sense, and the code in the branch will never be executed.  Unneeded code is bad, but it's really really bad if errors in that grabage code prevent the rest of the project from compiling.
+
+Enter the `exclude!` and `restrict!` directives.  You can use them to say, "These variants will never get here" (exclude) or "Only these variants will ever get here" (restrict).
+
+These control directives may exclude entire variants, but they may also be used within narrower runtime scopes.  A `restrict!` or `exclude!` directive effectively removes the rest of the code in the `Block` (all code until the end of the scope at the `'}'` brace) but doesn't affect other code in the method.
+
+Here is an example:
+
+```rust
+summum!{
+    enum Num {
+        F64(f64),
+        I64(i64),
+    }
+
+    impl Num {
+        fn multiply_int_only(&self, other: i64) -> Self {
+            summum_restrict!(I64);
+            (*self * other).into()
+        }
+        fn convert_to_float_without_rounding(&self) -> f64 {
+            if *self > i32::MAX as InnerT {
+                summum_exclude!(I64);
+                *self as f64
+            } else {
+                *self as f64
+            }
+        }
+    }
+}
+```
+
 ### Bonus Syntax: Haskell / TypeScript Style
 
 If you're into the whole brevity thing, you can write: 

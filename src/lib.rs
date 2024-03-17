@@ -12,7 +12,7 @@ use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
+use syn::{parse, parse2, parse_quote, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, punctuated::Punctuated, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
 use syn::spanned::Spanned;
 
 struct SummumType {
@@ -295,7 +295,8 @@ impl SummumImpl {
             if let ImplItem::Fn(mut item) = item {
 
                 //Create a specialized version of the function body for each variant
-                let variant_blocks = item_type.cases.iter().map(|variant| {
+                let mut variant_blocks = vec![];
+                for variant in item_type.cases.iter() {
                     let ident = &variant.ident;
                     let ident_string = ident.to_string();
                     let variant_t_name = format!("{}T", ident_string);
@@ -311,9 +312,16 @@ impl SummumImpl {
                     ], &[
                         ("_inner_var", &|base| snake_name(base, &ident_string))
                     ]);
+
+                    //Handle the "exclude" and "restrict" virtual control macros in the function body
+                    let block_tokenstream = match handle_excludes(block_tokenstream.into(), &ident_string) {
+                        Ok(block_tokenstream) => block_tokenstream,
+                        Err(err) => {return err.into();}
+                    };
+
                     let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
-                    block
-                }).collect::<Vec<_>>();
+                    variant_blocks.push(block);
+                }
 
                 //If the method name ends with "inner_var" then we'll generate a method for each variant
                 let item_fn_name = item.sig.ident.to_string();
@@ -519,8 +527,8 @@ impl Parse for TypeIdentParseHelper {
 
 /// Renders the name of a type into a single legal identifier token, stripping away generics and lifetimes
 fn ident_from_type_short(item_type: &Type) -> Result<Ident> {
-    let type_stream = quote!{ #item_type }.into();
-    let ident: TypeIdentParseHelper = parse(type_stream)?;
+    let type_stream = quote!{ #item_type };
+    let ident: TypeIdentParseHelper = parse2(type_stream)?;
     Ok(ident.0)
 }
 
@@ -566,6 +574,78 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)], ends_wi
     }
 
     new_stream
+}
+
+//Implement the "summum_exclude!" and "summum_restrict!" virtual macros
+fn handle_excludes(input: proc_macro2::TokenStream, branch_ident: &str) -> core::result::Result<proc_macro2::TokenStream, proc_macro2::TokenStream> {
+    let mut new_stream = proc_macro2::TokenStream::new();
+
+    // Ugh.  I wish I could just use the `parse` functionality in the `syn` crate, but I need
+    // to parameterize the types I'm trying to extract at runtime.  And that doesn't seem to be
+    // a supported use case.  This comment applies to many functions that look redundant
+
+    let mut input_iter = input.into_iter().peekable();
+    while let Some(item) = input_iter.next() {
+        match item {
+            TokenTree::Ident(ident) => {
+                let ident_string = ident.to_string();
+                if ident_string == "summum_exclude" || ident_string == "summum_restrict" {
+                    let is_exclude = ident_string == "summum_exclude";
+
+                    parse_punct(input_iter.next(), '!')?;
+                    let next_item = input_iter.next();
+                    let next_span = next_item.span();
+                    let macro_args = if let Some(TokenTree::Group(macro_args_group)) = next_item {
+                        let args_group_stream = macro_args_group.stream();
+                        let macro_args_punct: Punctuated::<Ident, Token![,]> = parse_quote!( #args_group_stream );
+                        let macro_args: Vec<String> = macro_args_punct.into_iter().map(|ident| ident.to_string()).collect();
+                        macro_args
+                    } else {
+                        return Err(quote_spanned! {next_span => compile_error!("Expecting tuple of variants"); }.into());
+                    };
+                    if parse_punct(input_iter.peek(), ';').is_ok() {
+                        let _ = input_iter.next();
+                    }
+
+                    let branch_in_list = macro_args.iter().find(|arg| arg.as_str() == branch_ident).is_some();
+
+                    if (is_exclude && branch_in_list) || (!is_exclude && !branch_in_list) {
+                        let unreachable_message = &format!("internal error: encountered {ident_string} for {branch_ident}");
+                        let panic_tokens = quote_spanned!{ident.span() =>
+                            {
+                                #new_stream
+                                panic!(#unreachable_message);
+                                // #[allow(unreachable_code)]
+                            }
+                        };
+                        return Ok(panic_tokens);
+                    }
+                } else {
+                    new_stream.extend([TokenTree::Ident(ident)]);
+                }
+            },
+            TokenTree::Group(group) => {
+                let new_group_stream = handle_excludes(group.stream(), branch_ident)?;
+                let mut new_group = Group::new(group.delimiter(), new_group_stream);
+                new_group.set_span(group.span());
+                new_stream.extend([TokenTree::Group(new_group)]);
+            },
+            _ => {new_stream.extend([item]);}
+        }
+    }
+    Ok(new_stream)
+}
+
+fn parse_punct<T: core::borrow::Borrow<TokenTree>>(item: Option<T>, the_char: char) -> core::result::Result<(), proc_macro2::TokenStream> {
+    let item_ref = item.as_ref().map(|i| i.borrow());
+    let span = item_ref.span();
+    if let Some(TokenTree::Punct(p)) = item_ref {
+        if p.as_char() == the_char {
+            return Ok(());
+        }
+    }
+    let err_string = format!("expecting {the_char}");
+    return Err(quote_spanned! {span => compile_error!(#err_string); }.into());
 }
 
 fn sig_contains_self_arg(sig: &Signature) -> bool {
