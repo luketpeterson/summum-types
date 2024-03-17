@@ -112,11 +112,11 @@ summum!{
             *self * multiplier + 1 as InnerT
         }
 
-        // fn max_inner_var() -> InnerT {
-        //     Self::MAX
-        // }
+        fn max_inner_var() -> InnerT {
+            InnerT::MAX
+        }
         fn max_inner_var() -> Self {
-            Self::MAX.into()
+            InnerT::MAX.into()
         }
     }
 
