@@ -12,7 +12,7 @@ use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, Signature, Token, Type, TypeParam, Variant, Visibility};
+use syn::{parse, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
 use syn::spanned::Spanned;
 
 struct SummumType {
@@ -41,7 +41,10 @@ impl SummumType {
                 ident_from_type_full(&item_type)
             };
 
-            let variant: Variant = parse(quote!{ #item_ident(#item_type) }.into())?;
+            let mut variant: Variant = parse(quote!{ #item_ident(#item_type) }.into())?;
+            let sub_type = type_from_fields_mut(&mut variant.fields);
+            cannonicalize_type_path(sub_type);
+
             cases.push(variant);
 
             if input.peek(Token![;]) {
@@ -65,7 +68,13 @@ impl SummumType {
         let enum_block: ItemEnum = input.parse()?;
         let name = enum_block.ident;
         let generics = enum_block.generics;
-        let cases = enum_block.variants.into_iter().collect();
+        let cases = enum_block.variants.into_iter()
+            .map(|mut variant| {
+                let sub_type = type_from_fields_mut(&mut variant.fields);
+                cannonicalize_type_path(sub_type);
+                variant
+            })
+            .collect();
 
         Ok(Self {
             attrs,
@@ -436,6 +445,26 @@ fn type_from_fields(fields: &Fields) -> &Type {
     if let Fields::Unnamed(field) = fields {
         &field.unnamed.first().unwrap().ty
     } else {panic!()}
+}
+
+fn type_from_fields_mut(fields: &mut Fields) -> &mut Type {
+    if let Fields::Unnamed(field) = fields {
+        &mut field.unnamed.first_mut().unwrap().ty
+    } else {panic!()}
+}
+
+/// Transforms `MyType<'a, T>` into `MyType::<'a, T>`
+fn cannonicalize_type_path(item_type: &mut Type) {
+    if let Type::Path(type_path) = item_type {
+        if let Some(segment) = type_path.path.segments.first_mut() {
+            let ident_span = segment.ident.span();
+            if let PathArguments::AngleBracketed(args) = &mut segment.arguments {
+                if args.colon2_token.is_none() {
+                    args.colon2_token = Some(Token![::](ident_span));
+                }
+            }
+        }
+    }
 }
 
 /// Detect the situation where we'd get the error: https://doc.rust-lang.org/error_codes/E0210.html
