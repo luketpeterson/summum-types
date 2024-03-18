@@ -134,6 +134,28 @@ summum!{
 }
 
 
+summum!{
+    enum Num {
+        F64(f64),
+        I64(i64),
+    }
+
+    impl Num {
+        fn multiply_int_only(&self, other: i64) -> Self {
+            summum_restrict!(I64);
+            (*self * other).into()
+        }
+        fn convert_to_float_without_rounding(&self) -> f64 {
+            if *self > i32::MAX as InnerT {
+                summum_exclude!(I64, ); //You can supply multiple variants
+                *self as f64
+            } else {
+                *self as f64
+            }
+        }
+    }
+}
+
 
 
 fn main() {

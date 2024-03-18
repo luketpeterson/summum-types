@@ -186,7 +186,7 @@ summum!{
         }
         fn convert_to_float_without_rounding(&self) -> f64 {
             if *self > i32::MAX as InnerT {
-                summum_exclude!(I64);
+                summum_exclude!(I64, ); //You can supply multiple variants
                 *self as f64
             } else {
                 *self as f64
