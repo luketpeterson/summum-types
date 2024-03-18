@@ -149,10 +149,22 @@ impl SummumType {
                 #ident_string
             }
         }).collect::<Vec<_>>();
+        let variant_name_branches = cases.iter().map(|variant| {
+            let ident = &variant.ident;
+            let ident_string = ident.to_string();
+            quote_spanned! {variant.span() =>
+                Self::#ident(_) => #ident_string
+            }
+        }).collect::<Vec<_>>();
         let variants_impl = quote!{
             impl #generics #name #generics {
                 pub const fn variants() -> &'static[&'static str] {
                     &[#(#variants_strs),* ]
+                }
+                pub fn variant_name(&self) -> &'static str {
+                    match self{
+                        #(#variant_name_branches),*
+                    }
                 }
             }
         };
@@ -178,12 +190,16 @@ impl SummumType {
             let ident_string = ident.to_string();
             let is_fn_name = Ident::new(&snake_name("is", &ident_string), variant.ident.span());
             let try_as_fn_name = Ident::new(&snake_name("try_as", &ident_string), variant.ident.span());
-            let as_fn_name = Ident::new(&snake_name("as", &ident_string), variant.ident.span());
+            let as_fn_name_str = snake_name("as", &ident_string);
+            let as_fn_name = Ident::new(&as_fn_name_str, variant.ident.span());
             let try_as_mut_fn_name = Ident::new(&snake_name("try_as_mut", &ident_string), variant.ident.span());
-            let as_mut_fn_name = Ident::new(&snake_name("as_mut", &ident_string), variant.ident.span());
+            let as_mut_fn_name_str = snake_name("as_mut", &ident_string);
+            let as_mut_fn_name = Ident::new(&as_mut_fn_name_str, variant.ident.span());
             let try_into_fn_name = Ident::new(&snake_name("try_into", &ident_string), variant.ident.span());
-            let into_fn_name = Ident::new(&snake_name("into", &ident_string), variant.ident.span());
+            let into_fn_name_str = snake_name("into", &ident_string);
+            let into_fn_name = Ident::new(&into_fn_name_str, variant.ident.span());
 
+            let error_msg = format!("invalid downcast: {name}::{{}} expecting {ident_string} found {{}}");
             quote_spanned! {variant.span() =>
                 pub fn #is_fn_name(&self) -> bool {
                     match self{Self::#ident(_)=>true, _=>false}
@@ -192,19 +208,20 @@ impl SummumType {
                     match self{Self::#ident(val)=>Some(val), _=>None}
                 }
                 pub fn #as_fn_name(&self) -> &#sub_type {
-                    self.#try_as_fn_name().unwrap()
+                    self.#try_as_fn_name().unwrap_or_else(|| panic!(#error_msg, #as_fn_name_str, self.variant_name()))
                 }
                 pub fn #try_as_mut_fn_name(&mut self) -> Option<&mut #sub_type> {
                     match self{Self::#ident(val)=>Some(val), _=>None}
                 }
                 pub fn #as_mut_fn_name(&mut self) -> &mut #sub_type {
-                    self.#try_as_mut_fn_name().unwrap()
+                    let variant_name = self.variant_name();
+                    self.#try_as_mut_fn_name().unwrap_or_else(|| panic!(#error_msg, #as_mut_fn_name_str, variant_name))
                 }
-                pub fn #try_into_fn_name(self) -> Option<#sub_type> {
-                    match self{Self::#ident(val)=>Some(val), _=>None}
+                pub fn #try_into_fn_name(self) -> core::result::Result<#sub_type, Self> {
+                    match self{Self::#ident(val)=>Ok(val), _=>Err(self)}
                 }
                 pub fn #into_fn_name(self) -> #sub_type {
-                    self.#try_into_fn_name().unwrap()
+                    self.#try_into_fn_name().unwrap_or_else(|t| panic!(#error_msg, #into_fn_name_str, t.variant_name()))
                 }
             }
         }).collect::<Vec<_>>();

@@ -44,11 +44,12 @@ And you automatically get all the accessors you'd want¹:
 - `pub fn as_*t*(&self) -> &T`
 - `pub fn try_as_mut_*t*(&mut self) -> Option<&mut T>`
 - `pub fn as_mut_*t*(&mut self) -> &mut T`
-- `pub fn try_into_*t*(self) -> Option<T>`
+- `pub fn try_into_*t*(self) -> Result<T, Self>`
 - `pub fn into_*t*(self) -> T`
+- `pub fn variant_name(&self) -> &'static str`
 - `pub fn SumT::variants() -> &[&str]`
 
-**Note**: `*t*` is a lower_snake_case rendering of the variant identifier
+**Note**: `*t*` is a lower_snake_case rendering of the variant identifier, and `SumT` is the type you defined
 
 <!-- The `generated_example` feature flag will create an example type named `GeneratedExample` which can be viewed using `rustdoc`. -->
 
