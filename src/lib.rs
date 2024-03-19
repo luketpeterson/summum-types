@@ -332,7 +332,7 @@ impl SummumImpl {
                     ]);
 
                     //Handle the "exclude" and "restrict" virtual control macros in the function body
-                    let block_tokenstream = match handle_excludes(block_tokenstream.into(), &ident_string) {
+                    let block_tokenstream = match handle_inner_macros(block_tokenstream.into(), &ident_string) {
                         Ok(block_tokenstream) => block_tokenstream,
                         Err(err) => {return err.into();}
                     };
@@ -594,8 +594,10 @@ fn replace_idents(input: proc_macro2::TokenStream, map: &[(&str, &str)], ends_wi
     new_stream
 }
 
+const MACRO_IDENT_LIST: &'static[&'static str] = &["summum_exclude", "summum_restrict", "summum_variant_name"];
+
 //Implement the "summum_exclude!" and "summum_restrict!" virtual macros
-fn handle_excludes(input: proc_macro2::TokenStream, branch_ident: &str) -> core::result::Result<proc_macro2::TokenStream, proc_macro2::TokenStream> {
+fn handle_inner_macros(input: proc_macro2::TokenStream, branch_ident: &str) -> core::result::Result<proc_macro2::TokenStream, proc_macro2::TokenStream> {
     let mut new_stream = proc_macro2::TokenStream::new();
 
     // Ugh.  I wish I could just use the `parse` functionality in the `syn` crate, but I need
@@ -607,9 +609,13 @@ fn handle_excludes(input: proc_macro2::TokenStream, branch_ident: &str) -> core:
         match item {
             TokenTree::Ident(ident) => {
                 let ident_string = ident.to_string();
-                if ident_string == "summum_exclude" || ident_string == "summum_restrict" {
-                    let is_exclude = ident_string == "summum_exclude";
-
+                if let Some(macro_ident_str) = MACRO_IDENT_LIST.iter().find_map(|key| {
+                    if key == &ident_string {
+                        Some(*key)
+                    } else {
+                        None
+                    }
+                }) {
                     parse_punct(input_iter.next(), '!')?;
                     let next_item = input_iter.next();
                     let next_span = next_item.span();
@@ -619,31 +625,43 @@ fn handle_excludes(input: proc_macro2::TokenStream, branch_ident: &str) -> core:
                         let macro_args: Vec<String> = macro_args_punct.into_iter().map(|ident| ident.to_string()).collect();
                         macro_args
                     } else {
-                        return Err(quote_spanned! {next_span => compile_error!("Expecting tuple of variants"); }.into());
+                        return Err(quote_spanned! {next_span => compile_error!("Expecting tuple for macro args"); }.into());
                     };
                     if parse_punct(input_iter.peek(), ';').is_ok() {
                         let _ = input_iter.next();
                     }
 
-                    let branch_in_list = macro_args.iter().find(|arg| arg.as_str() == branch_ident).is_some();
+                    match macro_ident_str {
+                        "summum_exclude" | "summum_restrict" => {
+                            let is_exclude = ident_string == "summum_exclude";
+                            let branch_in_list = macro_args.iter().find(|arg| arg.as_str() == branch_ident).is_some();
 
-                    if (is_exclude && branch_in_list) || (!is_exclude && !branch_in_list) {
-                        let unreachable_message = &format!("internal error: encountered {ident_string} for {branch_ident}");
-                        let panic_tokens = quote_spanned!{ident.span() =>
-                            {
-                                #new_stream
-                                panic!(#unreachable_message);
-                                // #[allow(unreachable_code)]
+                            if (is_exclude && branch_in_list) || (!is_exclude && !branch_in_list) {
+                                let unreachable_message = &format!("internal error: encountered {ident_string} on {branch_ident} branch");
+                                let panic_tokens = quote_spanned!{ident.span() =>
+                                    {
+                                        #new_stream
+                                        panic!(#unreachable_message);
+                                        // #[allow(unreachable_code)]
+                                    }
+                                };
+                                return Ok(panic_tokens);
                             }
-                        };
-                        return Ok(panic_tokens);
+                        },
+                        "summum_variant_name" => {
+                            let new_tokens = quote_spanned!{ident.span() =>
+                                #branch_ident
+                            };
+                            new_stream.extend(new_tokens);
+                        },
+                        _ => unreachable!()
                     }
                 } else {
                     new_stream.extend([TokenTree::Ident(ident)]);
                 }
             },
             TokenTree::Group(group) => {
-                let new_group_stream = handle_excludes(group.stream(), branch_ident)?;
+                let new_group_stream = handle_inner_macros(group.stream(), branch_ident)?;
                 let mut new_group = Group::new(group.delimiter(), new_group_stream);
                 new_group.set_span(group.span());
                 new_stream.extend([TokenTree::Group(new_group)]);

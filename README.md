@@ -199,6 +199,14 @@ summum!{
 }
 ```
 
+### Other Conveniences
+
+You can use the `summum_variant_name` macro to get a string representation of the variant being synthesized.  Very handy for debugging.
+
+```rust
+    println!("Executing the {} code path...", summum_variant_name!());
+```
+
 ### Bonus Syntax: Haskell / TypeScript Style
 
 If you're into the whole brevity thing, you can write: 
