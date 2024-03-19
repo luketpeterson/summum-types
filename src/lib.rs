@@ -324,6 +324,7 @@ impl SummumImpl {
                     //Swap all the occurance of `self`, etc. in the block
                     let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
                         ("self", "_summum_self"),
+                        ("super", "self"),
                         ("VariantT", &variant_t_name),
                         ("InnerT", &sub_type_string),
                     ], &[
