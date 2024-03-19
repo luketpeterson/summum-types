@@ -93,11 +93,11 @@ summum!{
 }
 ```
 
-Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specialized Method* (keep reading...) for constructors and other places where you don't want a `self` argument.
+Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specific Method* (keep reading...) for constructors and other places where you don't want a `self` argument.
 
 Of course you can also implement ordinary methods on the sub-type *outside* the `summum` invocation, where these behaviors don't apply.
 
-### Variant Specialized Methods
+### Variant Specific Methods
 
 Sometimes you need to generate an explicit method for each variant.  `summum` has you covered.  Just end a method name with `"_inner_var"` and it will be replaced by a separate method for each variant.  For example, the code below will lead to the generation of a the `max_f64` and `max_i64` methods.
 
@@ -116,9 +116,9 @@ summum!{
 }
 ```
 
-You can also pass `self` as an argument to variant-specialized methods.  Be warned, however, if the inner type of `self` doesn't agree with the method variant then the method will panic!
+You can also pass `self` as an argument to variant-specific methods.  Be warned, however, if the inner type of `self` doesn't agree with the method variant then the method will panic!
 
-Within a variant-specialized method, you can use `InnerT` in the function signature, for both arguments and the method return type.  For example:
+Within a variant-specific method, you can use `InnerT` in the function signature, for both arguments and the method return type.  For example:
 
 ```rust
     //Within the `summum` invocation above...
@@ -132,11 +132,11 @@ Within a variant-specialized method, you can use `InnerT` in the function signat
 
 ### Polymorphism
 
-One of the uses for sum-type enums is to fill a similar role to `dyn` trait objects in polymorphic method dispatch.  Sum-type enums provide different design constraints, such as being `Sized` and not requiring object safety.  Unlike the [Any trait](https://doc.rust-lang.org/std/any/index.html) in particular, summum types provide a method to recover ownership of the original type, and allowing internal lifetimes (no `'static` bound).
+One of the uses for sum-type enums is to fill a similar role to `dyn` trait objects in polymorphic method dispatch.  Sum-type enums provide different design constraints, such as being `Sized` and not requiring object safety.  Unlike the [Any trait](https://doc.rust-lang.org/std/any/index.html) in particular, summum types provide a method to recover ownership of the original type, and allow internal lifetimes (no `'static` bound).
 
 Sum-types are certainly not a replacement for dynamic dispatch in every case, but hopefully they will be another tool to reach for when it's convenient.
 
-### Variant Substitution in Method Calls for Interoperation Across Types
+### Variant Substitution in Calls for Interoperation Across Types
 
 Consider multiple types that interact with each other like in the example below.  Sometimes we need to interact with a related type in a way that depends on which variant we're generating.  In those cases, we can call the synthesized variant-specific functions of other types, as long as the variant names of the `impl` type are a superset of the type being called.
 
@@ -259,9 +259,9 @@ summum!{
 
 This feature is currently disabled on account of [this issue](https://github.com/rust-lang/rust/issues/8995).  Hopefully this will reach stable soon and I can re-enable it.
 
-#### Future Plan for Accessors
+#### Future Plan for Accessors / Variant-Specific Methods
 
-I'd like to implement generic accessors, along the lines of: `pub fn try_into_sub<T>(self) -> Option<T>`, for example.  This would eliminate the annoyance of remembering/ guessing what identifier is assigned to a particular variant.  Unfortunately that seems to be blcoked on [this issue](https://github.com/rust-lang/rust/issues/20041) for the time being.
+I'd like to implement generic accessors, along the lines of: `pub fn try_into<T>(self) -> Option<T>`.  This would eliminate the annoyance of remembering/ guessing what identifier is assigned to a particular variant.  Unfortunately that seems to be blcoked on [this issue](https://github.com/rust-lang/rust/issues/20041) for the time being.
 
 ## Acknowledgement & Other Options
 
