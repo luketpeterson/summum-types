@@ -27,6 +27,7 @@ It'a just a dumb pun.  It means "highest" in Latin.  No connection whatsoever to
 
 Define a sum type inside the `summum` macro, but otherwise it's just like any other enum:
 ```rust
+# use summum_types::summum;
 summum!{
     #[derive(Debug, Clone)]
     enum SliceOrPie<'a, T> {
@@ -61,6 +62,7 @@ And you automatically get all the accessors you'd want¹:
 You can also add method `impl` blocks, to implement functionality shared across every variant within your sum-type.  This expands to a match statement on `&self`, where `&self` is remapped to a local variable of the inner variant type.  For example:
 
 ```rust
+# use summum_types::summum;
 summum!{
     #[derive(Debug, Clone)]
     enum SliceOrPie<'a, T> {
@@ -79,6 +81,7 @@ summum!{
 You can also use `InnerT` as a local type alias that expands to the variant's inner type.  `Self` will continue to refer to the whole outer type.  If your method returns `Self`, you'll need to remember to use the `.into()` conversion to get back to the sum-type.  Like this:
 
 ```rust
+# use summum_types::summum;
 summum!{
     enum Num {
         F64(f64),
@@ -104,6 +107,7 @@ Of course you can also implement ordinary methods on the sub-type *outside* the 
 Sometimes you need to generate an explicit method for each variant.  `summum` has you covered.  Just end a method name with `"_inner_var"` and it will be replaced by a separate method for each variant.  For example, the code below will lead to the generation of a the `max_f64` and `max_i64` methods.
 
 ```rust
+# use summum_types::summum;
 summum!{
     enum Num {
         F64(f64),
@@ -122,7 +126,7 @@ You can also pass `self` as an argument to variant-specific methods.  Be warned,
 
 Within a variant-specific method, you can use `InnerT` in the function signature, for both arguments and the method return type.  For example:
 
-```rust
+```rust ignore
     //Within the `summum` invocation above...
 
     impl Num {
@@ -143,6 +147,7 @@ Sum-types are certainly not a replacement for dynamic dispatch in every case, bu
 Consider multiple types that interact with each other like in the example below.  Sometimes we need to interact with a related type in a way that depends on which variant we're generating.  In those cases, we can call the synthesized variant-specific functions of other types, as long as the variant names of the `impl` type are a superset of the type being called.
 
 ```rust
+# use summum_types::summum;
 summum!{
     enum Num {
         F64(f64),
@@ -176,6 +181,7 @@ These control directives may be used to remove entire variants, but they may als
 Here is an example:
 
 ```rust
+# use summum_types::summum;
 summum!{
     enum Num {
         F64(f64),
@@ -203,7 +209,7 @@ summum!{
 
 You can use the `summum_variant_name` macro to get a string representation of the variant being synthesized.  Very handy for debugging.
 
-```rust
+```rust ignore
     println!("Executing the {} code path...", summum_variant_name!());
 ```
 
@@ -211,6 +217,7 @@ You can use the `summum_variant_name` macro to get a string representation of th
 
 If you're into the whole brevity thing, you can write: 
 ```rust
+# use summum_types::summum;
 summum!{
     type Num = f64 | i64;
 }
@@ -218,6 +225,7 @@ summum!{
 
 You can use the `as` keyword to rename variants using this syntax:
 ```rust
+# use summum_types::summum;
 summum!{
     type VecOrVRef<'a, V> = &'a Vec<V> as Vec | 
                             &'a V as V;
@@ -244,7 +252,8 @@ In the vein of polymorphic method dispatch, I'd like to support "trait style" me
 
 I'd like to add support for accessing the type of each variant through an associated type alias.  So relative to the `Num` example above, the declaration would also include `type F64T = f64`.  What's the point of that?  By itself, not much.  But combine that with the ability for another type's implementation to reference this type via shared variants, using the `::VariantT` type alias, and you can do this:
 
-```rust
+```rust ignore
+# use summum_types::summum;
 summum!{
     enum Num {
         F64(f64),
@@ -277,7 +286,7 @@ I'd like to implement generic accessors, along the lines of: `pub fn try_into<T>
 
 Several other union type / sum type crates exist, and one of them might be better for your use case.  Each has things they do uniquely well and I took inspiration from all of them.
 
-- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has an sweet supertype feature for automatic conversions between types with variants in common.
+- [typeunion by Antonius Naumann](https://github.com/antoniusnaumann/typeunion) is great if you want something lightweight, and it has a sweet supertype feature for automatic conversions between types with variants in common.
 - [sum_type by Michael F. Bryan](https://github.com/Michael-F-Bryan/sum_type) is `no-std` and manages to do everything with declarative macros.  Also it supports downcasting for variant types that can implement the `Any` trait.
 - [typesum by Natasha England-Elbro](https://github.com/0x00002a/typesum) is awesome for the control it gives you over the generated output and the way it supports overlapping base types beautifully.  It'll cope much better if you plan to have a silly number of variants.
 

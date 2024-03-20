@@ -157,6 +157,7 @@ impl SummumType {
             }
         }).collect::<Vec<_>>();
         let variants_impl = quote!{
+            #[allow(dead_code)]
             impl #generics #name #generics {
                 pub const fn variants() -> &'static[&'static str] {
                     &[#(#variants_strs),* ]
@@ -725,3 +726,25 @@ pub mod generated_example {
 //TODO, Make sure overlapping types shared by different variants are handled nicely.
 //Maybe add an attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type,
 //or at the very least make a nice error
+
+
+//TODO - plan for adding structs 
+// * allow structs to be defined.
+//    - Include a separate block to define:
+//    - variant names
+//    - additional generic types
+//    - mappings for each generic to a concrete type or higher-level generic
+//
+//  * struct def needs to spin out a variant struct for each
+//  * also a unifying enum
+//  * When manifesting the structs, "InnerT" maps to `Self`, and Self maps to the enum
+//
+// * place struct method impls inside their own types's impl
+//   - and call to that impl from the outer enum impl
+//
+//
+//
+//README:
+// - "Enums as Sum-Types"
+// - "Runtime-Selected Generic Types in Structs"
+//
