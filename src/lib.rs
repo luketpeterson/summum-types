@@ -23,6 +23,10 @@ struct SummumType {
     cases: Vec<Variant>,
 }
 
+mod keywords {
+    syn::custom_keyword!(variants);
+}
+
 impl SummumType {
     fn parse_haskell_style(input: ParseStream, attrs: Vec<Attribute>, vis: Visibility) -> Result<Self> {
         let _ = input.parse::<Token![type]>()?;
@@ -85,6 +89,25 @@ impl SummumType {
         })
     }
 
+    fn parse_struct(input: ParseStream, attrs: Vec<Attribute>, vis: Visibility) -> Result<Self> {
+        let _ = input.parse::<Token![struct]>()?;
+        let name = input.parse()?;
+        let generics: Generics = input.parse()?;
+        let _ = input.parse::<keywords::variants>()?;
+        let runtime_generics = extract_runtime_generic_types(input.parse::<Generics>()?)?;
+        let mut cases = vec![];
+
+        //GOAT still non-functional
+
+        Ok(Self {
+            attrs,
+            vis,
+            name,
+            generics,
+            cases,
+        })
+    }
+
     fn parse(input: ParseStream, attrs: Vec<Attribute>) -> Result<Self> {
         let vis = input.parse()?;
 
@@ -92,9 +115,11 @@ impl SummumType {
             SummumType::parse_haskell_style(input, attrs, vis)
         } else if input.peek(Token![enum]) {
             SummumType::parse_enum_style(input, attrs, vis)
-        } else {
+        } else if input.peek(Token![struct]) {
+            SummumType::parse_struct(input, attrs, vis)
+        }else {
             input.step(|cursor| {
-                Err(cursor.error(format!("expected `enum`, `type`, or `impl`")))
+                Err(cursor.error(format!("expected `enum`, `struct`, `type`, or `impl`")))
             })
         }
     }
@@ -108,6 +133,8 @@ impl SummumType {
             cases,
         } = self;
 
+        let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+
         let cases_tokens = cases.iter().map(|variant| quote! {
             #variant
         }).collect::<Vec<_>>();
@@ -117,7 +144,7 @@ impl SummumType {
             let sub_type = type_from_fields(&variant.fields);
 
             quote_spanned! {variant.span() =>
-                impl #generics From<#sub_type> for #name #generics {
+                impl #impl_generics From<#sub_type> for #name #type_generics #where_clause {
                     fn from(val: #sub_type) -> Self {
                         #name::#ident(val)
                     }
@@ -131,7 +158,7 @@ impl SummumType {
             let sub_type = type_from_fields(&variant.fields);
             if !detect_uncovered_type(&generic_params[..], &sub_type) {
                 quote! {
-                    impl #generics core::convert::TryFrom<#name #generics> for #sub_type {
+                    impl #impl_generics core::convert::TryFrom<#name #type_generics> for #sub_type #where_clause {
                         type Error = ();
                         fn try_from(val: #name #generics) -> Result<Self, Self::Error> {
                             match val{#name::#ident(val)=>Ok(val), _=>Err(())}
@@ -158,7 +185,7 @@ impl SummumType {
         }).collect::<Vec<_>>();
         let variants_impl = quote!{
             #[allow(dead_code)]
-            impl #generics #name #generics {
+            impl #impl_generics #name #type_generics #where_clause {
                 pub const fn variants() -> &'static[&'static str] {
                     &[#(#variants_strs),* ]
                 }
@@ -228,12 +255,12 @@ impl SummumType {
         }).collect::<Vec<_>>();
         let accessors_impl = quote!{
             #[allow(dead_code)]
-            impl #generics #name #generics {
+            impl #impl_generics #name #type_generics #where_clause {
                 #(#accessor_impls)*
             }
         };
 
-        //TODO: re-enable this feature when https://github.com/rust-lang/rust/issues/8995 is available in stable
+        // //TODO: re-enable this feature when https://github.com/rust-lang/rust/issues/8995 is available in stable
         // let variant_type_aliases = cases.iter().map(|variant| {
         //     let ident = &variant.ident;
         //     let variant_type_ident = Ident::new(&format!("{}T", ident.to_string()), ident.span());
@@ -245,7 +272,7 @@ impl SummumType {
         // }).collect::<Vec<_>>();
         // let variant_type_aliases_impl = quote!{
         //     #[allow(dead_code)]
-        //     impl #generics #name #generics {
+        //     impl #impl_generics #name #type_generics #where_clause {
         //         #(#variant_type_aliases)*
         //     }
         // };
@@ -253,7 +280,7 @@ impl SummumType {
         quote! {
             #[allow(dead_code)]
             #(#attrs)*
-            #vis enum #name #generics {
+            #vis enum #name #type_generics #where_clause {
                 #(#cases_tokens),*
             }
 
@@ -481,6 +508,7 @@ fn type_from_fields_mut(fields: &mut Fields) -> &mut Type {
 
 /// Transforms `MyType<'a, T>` into `MyType::<'a, T>`
 fn cannonicalize_type_path(item_type: &mut Type) {
+    //Question: should we be using TypeGenerics::as_turbofish() in here somewhere??
     if let Type::Path(type_path) = item_type {
         if let Some(segment) = type_path.path.segments.first_mut() {
             let ident_span = segment.ident.span();
@@ -692,6 +720,19 @@ fn sig_contains_self_arg(sig: &Signature) -> bool {
         }
     }
     false
+}
+
+fn extract_runtime_generic_types(generics: Generics) -> Result<Vec<Ident>> {
+    let (_impl_generics, _type_generics, where_clause) = generics.split_for_impl();
+    if let Some(where_clause) = where_clause {
+        return Err(Error::new(where_clause.span(), "where clause illegal for runtime generics"));
+    }
+    let type_params = type_params_from_generics(&generics);
+
+
+    println!("GOAT type generics {:?}", type_params);
+
+    Ok(vec![])
 }
 
 /// An example of a generated sum type
