@@ -95,7 +95,10 @@ impl SummumType {
         let generics: Generics = input.parse()?;
         let _ = input.parse::<keywords::variants>()?;
         let runtime_generic_types = extract_runtime_generic_types(input.parse::<Generics>()?)?;
-        let cases = Self::parse_variants_from_struct_variants_clause(input.parse()?)?;
+
+        let variants_group_contents: ParseBuffer;
+        let _brace_token = syn::braced!(variants_group_contents in input);
+        let cases = Self::parse_variants_from_struct_variants_clause(variants_group_contents)?;
 
         let struct_fields_content: ParseBuffer;
         let _brace_token = syn::braced!(struct_fields_content in input);
@@ -110,49 +113,36 @@ impl SummumType {
         })
     }
 
-    fn parse_variants_from_struct_variants_clause(input_group: Group) -> Result<Vec<Variant>> {
+    fn parse_variants_from_struct_variants_clause(input: ParseBuffer) -> Result<Vec<Variant>> {
         let mut cases = vec![];
-        let mut input_iter = input_group.stream().into_iter().peekable();
 
-        let mut last_token_span = input_group.span();
-        loop {
+        while !input.is_empty() {
             //parse variant name identifier
-            let next_token = input_iter.next().ok_or_else(|| Error::new(last_token_span, "expected variant name identifier"))?;
-            last_token_span = next_token.span();
-            let variant_name = if let TokenTree::Ident(ident) = next_token {
-                ident
-            } else {
-                return Err(Error::new(last_token_span, "expected variant name identifier"));
-            };
+            let variant_name = input.parse::<Ident>()?;
 
             //parse bindings block
-            let next_token = input_iter.next().ok_or_else(|| Error::new(last_token_span, "expected tuple defining runtime generic type bindings, or comma"))?;
-            last_token_span = next_token.span();
-            let variant_generic_bindings = if let TokenTree::Group(group) = next_token {
-                Some(group)
-            } else {
-                None
-            };
+            let bindings_group_contents: ParseBuffer;
+            let _paren_token = syn::parenthesized!(bindings_group_contents in input);
+            let bindings = Self::parse_bindings_group(bindings_group_contents)?;
 
-            //GOAT, assemble the case here
+            //GOAT assemble the case here...
 
             //Expect ','
-            if let Some(next_token) = input_iter.next() {
-                last_token_span = next_token.span();
-                if !match next_token {
-                    TokenTree::Punct(p) => p.as_char() == ',',
-                    _ => false
-                } {
-                    return Err(Error::new(last_token_span, "expected ','"));
-                }
-            }
-
-            if input_iter.peek().is_none() {
-                break;
-            }
+            let _ = input.parse::<Option<Token![,]>>();
         }
-
         Ok(cases)
+    }
+
+    fn parse_bindings_group(input: ParseBuffer) -> Result<Vec<(Ident, Type)>> {
+        let mut bindings = vec![];
+        while !input.is_empty() {
+            let key = input.parse::<Ident>()?;
+            let _ = input.parse::<Token![=]>()?;
+            let binding_type = input.parse::<Type>()?;
+            let _ = input.parse::<Option<Token![,]>>();
+            bindings.push((key, binding_type));
+        }
+        Ok(bindings)
     }
 
     fn parse(input: ParseStream, attrs: Vec<Attribute>) -> Result<Self> {
