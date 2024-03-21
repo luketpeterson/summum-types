@@ -21,10 +21,24 @@ struct SummumType {
     name: Ident,
     generics: Generics,
     cases: Vec<Variant>,
+    sub_types: Vec<SubType>,
+    struct_fields: Vec<Field>,
 }
 
 mod keywords {
     syn::custom_keyword!(variants);
+}
+
+struct SubType {
+    variant_name: Ident,
+    bindings: Vec<(Ident, Type)>
+}
+
+impl SubType {
+    fn struct_type_ident(&self, base_name: &Ident) -> Ident {
+        let sub_type_name_string = format!("{}{}", base_name, self.variant_name);
+        Ident::new(&sub_type_name_string, self.variant_name.span())
+    }
 }
 
 impl SummumType {
@@ -65,6 +79,8 @@ impl SummumType {
             name,
             generics,
             cases,
+            sub_types: vec![],
+            struct_fields: vec![],
         })
     }
 
@@ -86,6 +102,8 @@ impl SummumType {
             name,
             generics,
             cases,
+            sub_types: vec![],
+            struct_fields: vec![],
         })
     }
 
@@ -94,15 +112,20 @@ impl SummumType {
         let name = input.parse()?;
         let generics: Generics = input.parse()?;
         let _ = input.parse::<keywords::variants>()?;
-        let runtime_generic_types = extract_runtime_generic_types(input.parse::<Generics>()?)?;
+
+        //We actually don't need these to reconstruct the types, beause they effectively just serve as
+        // pre-declarations, for the information in the variants' sub_type_bindings
+        let _runtime_generic_types = extract_runtime_generic_types(input.parse::<Generics>()?)?;
 
         let variants_group_contents: ParseBuffer;
         let _brace_token = syn::braced!(variants_group_contents in input);
-        let cases = Self::parse_variants_from_struct_variants_clause(variants_group_contents)?;
+        let sub_types = Self::parse_sub_types_from_struct_variants_clause(variants_group_contents)?;
+        let cases = Self::build_variants_from_sub_types(&name, &generics, &sub_types)?;
 
         let struct_fields_content: ParseBuffer;
         let _brace_token = syn::braced!(struct_fields_content in input);
-        let fields = struct_fields_content.parse_terminated(Field::parse_named, Token![,])?;
+        let struct_fields = struct_fields_content.parse_terminated(Field::parse_named, Token![,])?
+            .into_iter().collect();
 
         Ok(Self {
             attrs,
@@ -110,11 +133,13 @@ impl SummumType {
             name,
             generics,
             cases,
+            sub_types,
+            struct_fields,
         })
     }
 
-    fn parse_variants_from_struct_variants_clause(input: ParseBuffer) -> Result<Vec<Variant>> {
-        let mut cases = vec![];
+    fn parse_sub_types_from_struct_variants_clause(input: ParseBuffer) -> Result<Vec<SubType>> {
+        let mut sub_types = vec![];
 
         while !input.is_empty() {
             //parse variant name identifier
@@ -125,12 +150,12 @@ impl SummumType {
             let _paren_token = syn::parenthesized!(bindings_group_contents in input);
             let bindings = Self::parse_bindings_group(bindings_group_contents)?;
 
-            //GOAT assemble the case here...
+            sub_types.push(SubType{variant_name, bindings});
 
             //Expect ','
             let _ = input.parse::<Option<Token![,]>>();
         }
-        Ok(cases)
+        Ok(sub_types)
     }
 
     fn parse_bindings_group(input: ParseBuffer) -> Result<Vec<(Ident, Type)>> {
@@ -143,6 +168,23 @@ impl SummumType {
             bindings.push((key, binding_type));
         }
         Ok(bindings)
+    }
+
+    fn build_variants_from_sub_types(name: &Ident, generics: &Generics, sub_types: &Vec<SubType>) -> Result<Vec<Variant>> {
+        let (_impl_generics, type_generics, _where_clause) = generics.split_for_impl();
+        let mut cases = vec![];
+
+        for sub_type in sub_types {
+            let variant_name = &sub_type.variant_name;
+            let sub_type_name = sub_type.struct_type_ident(name);
+
+            let mut variant: Variant = parse(quote!{ #variant_name(#sub_type_name #type_generics) }.into())?;
+            let sub_type = type_from_fields_mut(&mut variant.fields);
+            cannonicalize_type_path(sub_type);
+            cases.push(variant);
+        }
+
+        Ok(cases)
     }
 
     fn parse(input: ParseStream, attrs: Vec<Attribute>) -> Result<Self> {
@@ -168,6 +210,8 @@ impl SummumType {
             name,
             generics,
             cases,
+            sub_types,
+            struct_fields,
         } = self;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
