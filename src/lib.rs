@@ -12,7 +12,7 @@ use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse, parse2, parse_quote, parse_macro_input, parse_str, Attribute, Block, Error, Fields, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, punctuated::Punctuated, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
+use syn::{parse, parse2, parse::ParseBuffer, parse_quote, parse_macro_input, parse_str, Attribute, Block, Error, Fields, Field, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, punctuated::Punctuated, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
 use syn::spanned::Spanned;
 
 struct SummumType {
@@ -94,10 +94,12 @@ impl SummumType {
         let name = input.parse()?;
         let generics: Generics = input.parse()?;
         let _ = input.parse::<keywords::variants>()?;
-        let runtime_generics = extract_runtime_generic_types(input.parse::<Generics>()?)?;
-        let mut cases = vec![];
+        let runtime_generic_types = extract_runtime_generic_types(input.parse::<Generics>()?)?;
+        let cases = Self::parse_variants_from_struct_variants_clause(input.parse()?)?;
 
-        //GOAT still non-functional
+        let struct_fields_content: ParseBuffer;
+        let _brace_token = syn::braced!(struct_fields_content in input);
+        let fields = struct_fields_content.parse_terminated(Field::parse_named, Token![,])?;
 
         Ok(Self {
             attrs,
@@ -106,6 +108,51 @@ impl SummumType {
             generics,
             cases,
         })
+    }
+
+    fn parse_variants_from_struct_variants_clause(input_group: Group) -> Result<Vec<Variant>> {
+        let mut cases = vec![];
+        let mut input_iter = input_group.stream().into_iter().peekable();
+
+        let mut last_token_span = input_group.span();
+        loop {
+            //parse variant name identifier
+            let next_token = input_iter.next().ok_or_else(|| Error::new(last_token_span, "expected variant name identifier"))?;
+            last_token_span = next_token.span();
+            let variant_name = if let TokenTree::Ident(ident) = next_token {
+                ident
+            } else {
+                return Err(Error::new(last_token_span, "expected variant name identifier"));
+            };
+
+            //parse bindings block
+            let next_token = input_iter.next().ok_or_else(|| Error::new(last_token_span, "expected tuple defining runtime generic type bindings, or comma"))?;
+            last_token_span = next_token.span();
+            let variant_generic_bindings = if let TokenTree::Group(group) = next_token {
+                Some(group)
+            } else {
+                None
+            };
+
+            //GOAT, assemble the case here
+
+            //Expect ','
+            if let Some(next_token) = input_iter.next() {
+                last_token_span = next_token.span();
+                if !match next_token {
+                    TokenTree::Punct(p) => p.as_char() == ',',
+                    _ => false
+                } {
+                    return Err(Error::new(last_token_span, "expected ','"));
+                }
+            }
+
+            if input_iter.peek().is_none() {
+                break;
+            }
+        }
+
+        Ok(cases)
     }
 
     fn parse(input: ParseStream, attrs: Vec<Attribute>) -> Result<Self> {
@@ -728,11 +775,11 @@ fn extract_runtime_generic_types(generics: Generics) -> Result<Vec<Ident>> {
         return Err(Error::new(where_clause.span(), "where clause illegal for runtime generics"));
     }
     let type_params = type_params_from_generics(&generics);
+    let results = type_params.into_iter().map(|type_param| {
+        type_param.ident.clone()
+    }).collect();
 
-
-    println!("GOAT type generics {:?}", type_params);
-
-    Ok(vec![])
+    Ok(results)
 }
 
 /// An example of a generated sum type
