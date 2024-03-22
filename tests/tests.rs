@@ -159,6 +159,36 @@ fn restrict_and_exclude_panic2() {
 }
 
 
+summum!{
+    #[allow(dead_code)]
+    #[derive(Clone)]
+    struct EM<V> variants<T> {
+        Nested(T=Self),
+        Not(T=V),
+    } {
+        apps: Option<Box<Self>>,
+        inners: Vec<InnerT>,
+        vars: Vec<T>,
+    }
+}
+
+#[test]
+fn validate_sub_type_structures() {
+    //NOTE: this test validates the sub-structs are created with the correct types, however
+    // this is ABSOLUTELY NOT the recommended way to use this feature.  This feature is
+    // intended to keep the sub_type structs abstracted away as much as possible
+    let new_sub_struct = EMNot::<usize> {
+        apps: None,
+        inners: vec![],
+        vars: vec![42 as usize],
+    };
+    let new_parent_enum: EM<usize> = new_sub_struct.clone().into();
+    let _other_sub_struct = EMNot::<usize> {
+        apps: Some(Box::new(new_parent_enum)),
+        inners: vec![new_sub_struct],
+        vars: vec![],
+    };
+}
 
 
 

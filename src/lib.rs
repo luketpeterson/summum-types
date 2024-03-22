@@ -215,17 +215,18 @@ impl SummumType {
         } = self;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+        let top_enum_type: Type = parse_quote! { #name #type_generics };
 
+        // render `impl From<VariantT> for SumT`
         let cases_tokens = cases.iter().map(|variant| quote! {
             #variant
         }).collect::<Vec<_>>();
-
         let from_impls = cases.iter().map(|variant| {
             let ident = &variant.ident;
             let sub_type = type_from_fields(&variant.fields);
 
             quote_spanned! {variant.span() =>
-                impl #impl_generics From<#sub_type> for #name #type_generics #where_clause {
+                impl #impl_generics From<#sub_type> for #top_enum_type #where_clause {
                     fn from(val: #sub_type) -> Self {
                         #name::#ident(val)
                     }
@@ -233,15 +234,16 @@ impl SummumType {
             }
         }).collect::<Vec<_>>();
 
+        // render `impl TryFrom<SumT> for VariantT`
         let generic_params = type_params_from_generics(&generics);
         let try_from_impls = cases.iter().map(|variant| {
             let ident = &variant.ident;
             let sub_type = type_from_fields(&variant.fields);
             if !detect_uncovered_type(&generic_params[..], &sub_type) {
                 quote! {
-                    impl #impl_generics core::convert::TryFrom<#name #type_generics> for #sub_type #where_clause {
+                    impl #impl_generics core::convert::TryFrom<#top_enum_type> for #sub_type #where_clause {
                         type Error = ();
-                        fn try_from(val: #name #generics) -> Result<Self, Self::Error> {
+                        fn try_from(val: #top_enum_type) -> Result<Self, Self::Error> {
                             match val{#name::#ident(val)=>Ok(val), _=>Err(())}
                         }
                     }
@@ -251,6 +253,7 @@ impl SummumType {
             }
         }).collect::<Vec<_>>();
 
+        // render `SumT::variants() and SumT::variant_name()`
         let variants_strs = cases.iter().map(|variant| {
             let ident_string = &variant.ident.to_string();
             quote_spanned! {variant.span() =>
@@ -266,7 +269,7 @@ impl SummumType {
         }).collect::<Vec<_>>();
         let variants_impl = quote!{
             #[allow(dead_code)]
-            impl #impl_generics #name #type_generics #where_clause {
+            impl #impl_generics #top_enum_type #where_clause {
                 pub const fn variants() -> &'static[&'static str] {
                     &[#(#variants_strs),* ]
                 }
@@ -292,6 +295,7 @@ impl SummumType {
         //     }
         // };
 
+        // render individual variant accessor methods
         let accessor_impls = cases.iter().map(|variant| {
             let ident = &variant.ident;
             let sub_type = type_from_fields(&variant.fields);
@@ -336,7 +340,7 @@ impl SummumType {
         }).collect::<Vec<_>>();
         let accessors_impl = quote!{
             #[allow(dead_code)]
-            impl #impl_generics #name #type_generics #where_clause {
+            impl #impl_generics #top_enum_type #where_clause {
                 #(#accessor_impls)*
             }
         };
@@ -353,17 +357,32 @@ impl SummumType {
         // }).collect::<Vec<_>>();
         // let variant_type_aliases_impl = quote!{
         //     #[allow(dead_code)]
-        //     impl #impl_generics #name #type_generics #where_clause {
+        //     impl #impl_generics #top_enum_type #where_clause {
         //         #(#variant_type_aliases)*
         //     }
         // };
 
+        //Render the sub-type structs
+        let sub_types_vec = sub_types.iter().map(|sub_type| {
+            let variant_name = sub_type.struct_type_ident(name);
+            let sub_type_fields = remap_sub_type_fields(&struct_fields[..], &sub_type.bindings, &top_enum_type);
+            quote_spanned! {variant_name.span() =>
+                #(#attrs)*
+                #vis struct #variant_name #type_generics #where_clause {
+                    #(#sub_type_fields),*
+                }
+            }
+        }).collect::<Vec<_>>();
+
+        //Top-level renderer that produces the output
         quote! {
             #[allow(dead_code)]
             #(#attrs)*
-            #vis enum #name #type_generics #where_clause {
+            #vis enum #top_enum_type #where_clause {
                 #(#cases_tokens),*
             }
+
+            #(#sub_types_vec)*
 
             #(#from_impls)*
 
@@ -816,6 +835,36 @@ fn extract_runtime_generic_types(generics: Generics) -> Result<Vec<Ident>> {
     Ok(results)
 }
 
+/// Replaces types inside the fields of a struct using a bindings table.
+/// Additionally, `InnerT` maps to `Self`, and `Self` maps onto the parent type
+fn remap_sub_type_fields(src_fields: &[Field], bindings: &[(Ident, Type)], parent_enum_type: &Type) -> Vec<Field> {
+    //QUESTION FOR FUTURE: should it seems silly to convert all these types into strings, only to
+    // convert them back into types.  But I don't want to touch the machinery of replace_idents
+    // right now, and also a string is a reasonable lowest-common-denominator
+    let parent_enum_string = quote!{ #parent_enum_type }.to_string();
+    let stringified_bindings: Vec<(String, String)> = bindings.into_iter()
+            .map(|(key, ty)| (key.to_string(), quote!{ #ty }.to_string())).collect();
+    let pairs: Vec<(&str, &str)> = stringified_bindings.iter()
+            .map(|(key, ty)| (key.as_str(), ty.as_str()))
+            .map(|(key, ty)| { match ty {
+                "Self" => (key, parent_enum_string.as_str()), //Remapping to Self should actually remap to the parent enum
+                "InnerT" => (key, parent_enum_string.as_str()), //Remapping to InnerT should actually remap to the Self
+                _ => (key, ty)
+            }})
+            .chain([("Self", parent_enum_string.as_str()), ("InnerT", "Self")].into_iter()).collect();
+
+    let mut new_fields = vec![];
+    for field in src_fields {
+        let field_type = &field.ty;
+        let field_tokens = quote!{ #field_type };
+        let new_tokens = replace_idents(field_tokens, &pairs, &[]);
+        let mut new_field = field.clone();
+        new_field.ty = parse2(new_tokens).unwrap();
+        new_fields.push(new_field);
+    }
+    new_fields
+}
+
 /// An example of a generated sum type
 #[cfg(feature = "generated_example")]
 #[allow(missing_docs)]
@@ -860,6 +909,9 @@ pub mod generated_example {
 //  * struct def needs to spin out a variant struct for each
 //  * also a unifying enum
 //  * When manifesting the structs, "InnerT" maps to `Self`, and Self maps to the enum
+//
+// * Need to inject phantom_data into subtypes that don't use all the type_generics.
+//   BETTER IDEA: strip the type-generics for the sub-type.  I should do this after the re-mapping, so I can track which vars are ultimately used, since the re-mapping can map to generic vars
 //
 // * place struct method impls inside their own types's impl
 //   - and call to that impl from the outer enum impl
