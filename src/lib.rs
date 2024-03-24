@@ -12,7 +12,7 @@ use proc_macro2::{TokenTree, Group};
 use quote::{ToTokens, quote, quote_spanned};
 use heck::{AsUpperCamelCase, AsSnakeCase};
 use syn::parse::{Parse, ParseStream, Result};
-use syn::{parse, parse2, parse::ParseBuffer, parse_quote, parse_macro_input, parse_str, Attribute, Block, Error, Fields, Field, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, punctuated::Punctuated, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
+use syn::{parse, parse2, parse::ParseBuffer, parse_quote, parse_macro_input, parse_str, Attribute, Block, Error, Fields, Field, GenericParam, Generics, Ident, ImplItem, ItemEnum, ItemImpl, FnArg, punctuated::Punctuated, Pat, Signature, Token, Type, TypeParam, PathArguments, Variant, Visibility};
 use syn::spanned::Spanned;
 
 struct SummumType {
@@ -203,6 +203,12 @@ impl SummumType {
         }
     }
 
+    fn top_enum_type(&self) -> Type {
+        let name = &self.name;
+        let (_impl_generics, type_generics, _where_clause) = self.generics.split_for_impl();
+        parse_quote! { #name #type_generics }
+    }
+
     fn render(&self) -> TokenStream {
         let Self {
             attrs,
@@ -215,7 +221,7 @@ impl SummumType {
         } = self;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
-        let top_enum_type: Type = parse_quote! { #name #type_generics };
+        let top_enum_type = self.top_enum_type();
 
         // render `impl From<VariantT> for SumT`
         let cases_tokens = cases.iter().map(|variant| quote! {
@@ -424,6 +430,7 @@ impl SummumImpl {
 
     fn render(&mut self, types: &HashMap<String, SummumType>) -> TokenStream {
         let item_impl = &mut self.item_impl;
+        let (impl_generics, _type_generics, where_clause) = item_impl.generics.split_for_impl();
 
         let item_type = if let Some(item_type) = types.get(&self.item_type_name.to_string()) {
             item_type
@@ -432,6 +439,12 @@ impl SummumImpl {
                 self.item_type_name.span() => compile_error!("can't find definition for type in summum block");
             }.into();
         };
+        let top_enum_type = item_type.top_enum_type();
+        let top_enum_type_string = quote!{ #top_enum_type }.to_string();
+        let (_impl_generics, type_generics, _where_clause) = item_type.generics.split_for_impl();
+
+        let mut sub_type_impls: Vec<proc_macro2::TokenStream> = (0..item_type.sub_types.len())
+            .into_iter().map(|_| quote!()).collect();
 
         let impl_span = item_impl.span();
         let items = core::mem::take(&mut item_impl.items);
@@ -441,7 +454,7 @@ impl SummumImpl {
 
                 //Create a specialized version of the function body for each variant
                 let mut variant_blocks = vec![];
-                for variant in item_type.cases.iter() {
+                for (variant_idx, variant) in item_type.cases.iter().enumerate() {
                     let ident = &variant.ident;
                     let ident_string = ident.to_string();
                     let variant_t_name = format!("{}T", ident_string);
@@ -450,14 +463,26 @@ impl SummumImpl {
                     let sub_type_string = quote!{ #sub_type }.to_string();
 
                     //Swap all the occurance of `self`, etc. in the block
-                    let block_tokenstream = replace_idents(item.block.to_token_stream(), &[
-                        ("self", "_summum_self"),
-                        ("super", "self"),
-                        ("VariantT", &variant_t_name),
-                        ("InnerT", &sub_type_string),
-                    ], &[
-                        ("_inner_var", &|base| snake_name(base, &ident_string))
-                    ]);
+                    let block_tokenstream = if item_type.sub_types.len() > 0 {
+                        //We're processing the block for a subtype's impl
+                        replace_idents(item.block.to_token_stream(), &[
+                            ("VariantT", &variant_t_name),
+                            ("InnerT", "Self"),
+                            ("Self", &top_enum_type_string)
+                        ], &[
+                            ("_inner_var", &|base| snake_name(base, &ident_string))
+                        ])
+                    } else {
+                        //We're processing the block for embedding in a match statement
+                        replace_idents(item.block.to_token_stream(), &[
+                            ("self", "_summum_self"),
+                            ("super", "self"),
+                            ("VariantT", &variant_t_name),
+                            ("InnerT", &sub_type_string),
+                        ], &[
+                            ("_inner_var", &|base| snake_name(base, &ident_string))
+                        ])
+                    };
 
                     //Handle the "exclude" and "restrict" virtual control macros in the function body
                     let block_tokenstream = match handle_inner_macros(block_tokenstream.into(), &ident_string) {
@@ -465,8 +490,39 @@ impl SummumImpl {
                         Err(err) => {return err.into();}
                     };
 
-                    let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
-                    variant_blocks.push(block);
+                    //If the impl is on a struct, then we need a method impl for each sub_type
+                    if item_type.sub_types.len() > 0 {
+                        let item_sig = &item.sig;
+                        let subtype_fn = quote_spanned!{item.block.span() =>
+                            #item_sig
+                            #block_tokenstream
+                        };
+                        sub_type_impls[variant_idx].extend(subtype_fn);
+
+                        //Construct the body block to call the function we just created
+                        let fn_ident = &item.sig.ident;
+                        let fn_args: Vec<Ident> = item.sig.inputs.iter()
+                            .filter_map(|arg| ident_for_fn_arg(arg).cloned()).collect();
+
+                        let fn_call_tokens = if sig_contains_self_arg(&item.sig) {
+                            quote_spanned!{item.block.span() =>
+                                { _summum_self.#fn_ident( #(#fn_args),* ).into() }
+                            }
+                        } else {
+                            quote_spanned!{item.block.span() =>
+                                { #sub_type :: #fn_ident( #(#fn_args),* ).into() }
+                            }
+                        };
+
+                        let reference_block: Block = parse( fn_call_tokens.into()).expect("Error composing reference-block");
+                        variant_blocks.push(reference_block);
+                    } else {
+
+                        //If the impl isn't on a struct, Incorporate the block itself into
+                        // the match statment or variant-specialized-function's body
+                        let block: Block = parse(quote_spanned!{item.block.span() => { #block_tokenstream } }.into()).expect("Error composing sub-block");
+                        variant_blocks.push(block);
+                    }
                 }
 
                 //If the method name ends with "inner_var" then we'll generate a method for each variant
@@ -476,6 +532,9 @@ impl SummumImpl {
                     for (variant, block) in item_type.cases.iter().zip(variant_blocks) {
                         let mut new_item = item.clone();
 
+                        new_item.attrs.push(parse_quote! {
+                            #[allow(dead_code)]
+                        });
                         let item_type_name = self.item_type_name.to_string();
                         let ident = &variant.ident;
                         let ident_string = ident.to_string();
@@ -529,13 +588,32 @@ impl SummumImpl {
                     new_items.push(ImplItem::Fn(item));
                 }
             } else {
+                //QUESTION: Do I also need to perform type-substitution on non-fn items here?
+                //ANSWER: I don't think so because InnerT and VariantT are both meaningless in
+                // code that spans all variants
                 new_items.push(item);
             }
         }
         item_impl.items = new_items;
 
+        let sub_type_impls: Vec<proc_macro2::TokenStream> = sub_type_impls.into_iter()
+            .zip(item_type.sub_types.iter())
+            .map(|(sub_type_impl_fns, sub_type)| {
+            let variant_name = sub_type.struct_type_ident(&item_type.name);
+
+            //TODO, Also need to carry forward the non-function items from the item_impl.items field
+            // Which then means I also need to do type substitution on them
+            quote_spanned!{impl_span => 
+                impl #impl_generics #variant_name #type_generics #where_clause {
+                    #sub_type_impl_fns
+                }
+            }
+        }).collect();
+
         quote_spanned!{impl_span =>
             #item_impl
+
+            #(#sub_type_impls)*
         }.into()
     }
 }
@@ -637,6 +715,18 @@ fn detect_uncovered_type(generic_type_params: &[&TypeParam], item_type: &Type) -
         }
         Type::Reference(type_ref) => detect_uncovered_type(generic_type_params, &type_ref.elem),
         _ => false
+    }
+}
+
+/// Extranct the ident from an FnArg, to turn the args in the signature of a function into the
+/// args needed to call the function.  Don't call this on 'self`
+fn ident_for_fn_arg(arg: &FnArg) -> Option<&Ident> {
+    match arg {
+        FnArg::Typed(pat) => match &*pat.pat {
+            Pat::Ident(ident) => Some(&ident.ident),
+            _ => None
+        },
+        _ => None
     }
 }
 
@@ -841,17 +931,18 @@ fn remap_sub_type_fields(src_fields: &[Field], bindings: &[(Ident, Type)], paren
     //QUESTION FOR FUTURE: should it seems silly to convert all these types into strings, only to
     // convert them back into types.  But I don't want to touch the machinery of replace_idents
     // right now, and also a string is a reasonable lowest-common-denominator
-    let parent_enum_string = quote!{ #parent_enum_type }.to_string();
+    let parent_enum_type_string = quote!{ #parent_enum_type }.to_string();
     let stringified_bindings: Vec<(String, String)> = bindings.into_iter()
             .map(|(key, ty)| (key.to_string(), quote!{ #ty }.to_string())).collect();
     let pairs: Vec<(&str, &str)> = stringified_bindings.iter()
             .map(|(key, ty)| (key.as_str(), ty.as_str()))
             .map(|(key, ty)| { match ty {
-                "Self" => (key, parent_enum_string.as_str()), //Remapping to Self should actually remap to the parent enum
-                "InnerT" => (key, parent_enum_string.as_str()), //Remapping to InnerT should actually remap to the Self
+                "Self" => (key, parent_enum_type_string.as_str()), //Remapping to Self should actually remap to the parent enum
+                "InnerT" => (key, "Self"), //Remapping to InnerT should actually remap to the Self
                 _ => (key, ty)
             }})
-            .chain([("Self", parent_enum_string.as_str()), ("InnerT", "Self")].into_iter()).collect();
+            .chain([("Self", parent_enum_type_string.as_str()), ("InnerT", "Self")].into_iter()).collect();
+    //QUESTION/ TODO: Should we process "VariantT" here as well?  Probably Yes.
 
     let mut new_fields = vec![];
     for field in src_fields {
@@ -897,6 +988,11 @@ pub mod generated_example {
 //TODO, Make sure overlapping types shared by different variants are handled nicely.
 //Maybe add an attribute so From<> and TryFrom<> impl can be disabled to avoid conflict when two variants have the same type,
 //or at the very least make a nice error
+//UPDATE: any overlap in variant types should probably cause from impls for that type to be
+// disabled totally.  But to get around that problem, I should also make dedicated `from_*t*` constructor methods
+
+//TODO: Need to inject phantom_data into subtypes that don't use all the type_generics.
+//   BETTER IDEA: strip the type-generics for the sub-type.  I should do this after the re-mapping, so I can track which vars are ultimately used, since the re-mapping can map to generic vars
 
 
 //TODO - plan for adding structs 
@@ -910,8 +1006,6 @@ pub mod generated_example {
 //  * also a unifying enum
 //  * When manifesting the structs, "InnerT" maps to `Self`, and Self maps to the enum
 //
-// * Need to inject phantom_data into subtypes that don't use all the type_generics.
-//   BETTER IDEA: strip the type-generics for the sub-type.  I should do this after the re-mapping, so I can track which vars are ultimately used, since the re-mapping can map to generic vars
 //
 // * place struct method impls inside their own types's impl
 //   - and call to that impl from the outer enum impl

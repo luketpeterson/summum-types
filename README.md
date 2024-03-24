@@ -98,7 +98,7 @@ summum!{
 
 Yes, all abstract methods need `self` to know which variant type to use.  You can also use a *Variant Specific Method* (keep reading...) for constructors and other places where you don't want a `self` argument.
 
-If you happen to need access to the whole type, you can also use `super`, which refers to the outer sum-type.  Unfortunately, this will only work for immutable `&self` methods, because it will create borrow checker issues for `&mut self` and owned `self` methods on account of the inner type being borrowed from the outer sum-type.
+If you happen to need access to the whole type, you can also use `super`, which refers to the outer sum-type.  Unfortunately, this will only work for immutable `&self` methods, because it will create borrow checker issues for `&mut self` and owned `self` methods on account of the inner type being borrowed from the outer sum-type.  Also `super` is not available in sum-types declared as structs because the implementation is associated with the subtype struct's impl, not the sum-type's enum.
 
 Of course you can also implement ordinary methods on the sub-type *outside* the `summum` invocation, where these behaviors don't apply.
 
