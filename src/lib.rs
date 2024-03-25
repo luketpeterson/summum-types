@@ -499,7 +499,21 @@ impl SummumImpl {
 
                     //If the impl is on a struct, then we need a method impl for each sub_type
                     if item_type.sub_types.len() > 0 {
-                        let item_sig = &item.sig;
+
+                        //Swap out `VariantT` and `InnerT` in the method signature and return value
+                        let variant_t_name = format!("{}T", ident_string);
+                        let sig_tokenstream = replace_idents(item.sig.to_token_stream(), &[
+                            ("VariantT", &variant_t_name),
+                            ("InnerT", "Self"),
+                        ], &[]);
+                        let mut item_sig: Signature = parse(quote_spanned!{item.sig.span() => #sig_tokenstream }.into()).expect("Error replacing signature types");
+                        let item_sig_ident_string = item_sig.ident.to_string();
+                        if item_sig_ident_string.ends_with("_inner_var") {
+                            let base_name = &item_sig_ident_string[0..(item_sig_ident_string.len() - "_inner_var".len())];
+                            let new_ident_string = snake_name(base_name, &ident_string);
+                            item_sig.ident = Ident::new(&new_ident_string, item_sig.ident.span());
+                        }
+
                         let subtype_fn = quote_spanned!{item.block.span() =>
                             #item_sig
                             #block_tokenstream
@@ -507,7 +521,7 @@ impl SummumImpl {
                         sub_type_impls[variant_idx].extend(subtype_fn);
 
                         //Construct the body block to call the function we just created
-                        let fn_ident = &item.sig.ident;
+                        let fn_ident = &item_sig.ident;
                         let fn_args: Vec<Ident> = item.sig.inputs.iter()
                             .filter_map(|arg| ident_for_fn_arg(arg).cloned()).collect();
 
