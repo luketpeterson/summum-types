@@ -25,9 +25,15 @@ fn haskell_style_simple() {
 
 summum!{
     #[derive(Debug, Clone)]
-    enum VecOrV<V> {
+    enum VecOrV<V> where V: Default {
         Vec(Vec<V>),
         V(V),
+    }
+
+    impl<V> VecOrV<V> where V: Default {
+        fn default_inner_var() -> Self {
+            InnerT::default().into()
+        }
     }
 }
 
@@ -163,12 +169,25 @@ summum!{
     #[allow(dead_code)]
     #[derive(Clone)]
     struct EM<V> variants<T> {
+        #[derive(Default)]
         Nested(T=Self),
+        #[derive(Default)]
         Not(T=V),
     } {
         apps: Option<Box<Self>>,
         inners: Vec<InnerT>,
         vars: Vec<T>,
+    }
+
+    impl<V> EM<V> where V: Default {
+        /// Testing invoking the default implemented by the default macro
+        fn default_a_inner_var() -> Self {
+            InnerT::default().into()
+        }
+        /// Testing invoking the other default
+        fn default_b_inner_var() -> Self {
+            Self::default_a_inner_var().into_inner_var()
+        }
     }
 }
 
@@ -189,6 +208,18 @@ fn validate_sub_type_structures() {
         vars: vec![],
     };
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -234,4 +265,3 @@ fn validate_sub_type_structures() {
 //     type NestedOrNotRefMut<'a, V> = &'a mut ExprMap<V> as Nested | &'a mut V as Not;
 
 // }
-

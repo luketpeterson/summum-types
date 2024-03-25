@@ -30,6 +30,7 @@ mod keywords {
 }
 
 struct SubType {
+    attrs: Vec<Attribute>,
     variant_name: Ident,
     bindings: Vec<(Ident, Type)>
 }
@@ -61,7 +62,7 @@ impl SummumType {
 
             let mut variant: Variant = parse(quote!{ #item_ident(#item_type) }.into())?;
             let sub_type = type_from_fields_mut(&mut variant.fields);
-            cannonicalize_type_path(sub_type);
+            canonicalize_type_path(sub_type);
 
             cases.push(variant);
 
@@ -91,7 +92,7 @@ impl SummumType {
         let cases = enum_block.variants.into_iter()
             .map(|mut variant| {
                 let sub_type = type_from_fields_mut(&mut variant.fields);
-                cannonicalize_type_path(sub_type);
+                canonicalize_type_path(sub_type);
                 variant
             })
             .collect();
@@ -142,6 +143,9 @@ impl SummumType {
         let mut sub_types = vec![];
 
         while !input.is_empty() {
+            //parse variant attributes
+            let attrs = input.call(Attribute::parse_outer)?;
+
             //parse variant name identifier
             let variant_name = input.parse::<Ident>()?;
 
@@ -150,7 +154,7 @@ impl SummumType {
             let _paren_token = syn::parenthesized!(bindings_group_contents in input);
             let bindings = Self::parse_bindings_group(bindings_group_contents)?;
 
-            sub_types.push(SubType{variant_name, bindings});
+            sub_types.push(SubType{attrs, variant_name, bindings});
 
             //Expect ','
             let _ = input.parse::<Option<Token![,]>>();
@@ -180,7 +184,7 @@ impl SummumType {
 
             let mut variant: Variant = parse(quote!{ #variant_name(#sub_type_name #type_generics) }.into())?;
             let sub_type = type_from_fields_mut(&mut variant.fields);
-            cannonicalize_type_path(sub_type);
+            canonicalize_type_path(sub_type);
             cases.push(variant);
         }
 
@@ -206,7 +210,9 @@ impl SummumType {
     fn top_enum_type(&self) -> Type {
         let name = &self.name;
         let (_impl_generics, type_generics, _where_clause) = self.generics.split_for_impl();
-        parse_quote! { #name #type_generics }
+        let enum_type = parse_quote! { #name #type_generics };
+        // canonicalize_type_path(&mut enum_type); GOAT, why does canonicalizing here cause problems?
+        enum_type
     }
 
     fn render(&self) -> TokenStream {
@@ -371,9 +377,11 @@ impl SummumType {
         //Render the sub-type structs
         let sub_types_vec = sub_types.iter().map(|sub_type| {
             let variant_name = sub_type.struct_type_ident(name);
+            let sub_type_attrs = &sub_type.attrs;
             let sub_type_fields = remap_sub_type_fields(&struct_fields[..], &sub_type.bindings, &top_enum_type);
             quote_spanned! {variant_name.span() =>
                 #(#attrs)*
+                #(#sub_type_attrs)*
                 #vis struct #variant_name #type_generics #where_clause {
                     #(#sub_type_fields),*
                 }
@@ -441,6 +449,8 @@ impl SummumImpl {
         };
         let top_enum_type = item_type.top_enum_type();
         let top_enum_type_string = quote!{ #top_enum_type }.to_string();
+        //GOAT work out how and where to bracket these types
+        // let top_enum_type_string = quote!{ < #top_enum_type > }.to_string(); //GOAT
         let (_impl_generics, type_generics, _where_clause) = item_type.generics.split_for_impl();
 
         let mut sub_type_impls: Vec<proc_macro2::TokenStream> = (0..item_type.sub_types.len())
@@ -461,6 +471,8 @@ impl SummumImpl {
 
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ #sub_type }.to_string();
+                    //GOAT, work out how and where to bracket these types
+                    // let sub_type_string = quote!{ < #sub_type > }.to_string();
 
                     //Swap all the occurance of `self`, etc. in the block
                     let block_tokenstream = if item_type.sub_types.len() > 0 {
@@ -685,7 +697,7 @@ fn type_from_fields_mut(fields: &mut Fields) -> &mut Type {
 }
 
 /// Transforms `MyType<'a, T>` into `MyType::<'a, T>`
-fn cannonicalize_type_path(item_type: &mut Type) {
+fn canonicalize_type_path(item_type: &mut Type) {
     //Question: should we be using TypeGenerics::as_turbofish() in here somewhere??
     if let Type::Path(type_path) = item_type {
         if let Some(segment) = type_path.path.segments.first_mut() {
