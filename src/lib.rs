@@ -210,9 +210,7 @@ impl SummumType {
     fn top_enum_type(&self) -> Type {
         let name = &self.name;
         let (_impl_generics, type_generics, _where_clause) = self.generics.split_for_impl();
-        let enum_type = parse_quote! { #name #type_generics };
-        // canonicalize_type_path(&mut enum_type); GOAT, why does canonicalizing here cause problems?
-        enum_type
+        parse_quote! { #name #type_generics }
     }
 
     fn render(&self) -> TokenStream {
@@ -447,10 +445,9 @@ impl SummumImpl {
                 self.item_type_name.span() => compile_error!("can't find definition for type in summum block");
             }.into();
         };
-        let top_enum_type = item_type.top_enum_type();
+        let mut top_enum_type = item_type.top_enum_type();
+        canonicalize_type_path(&mut top_enum_type);
         let top_enum_type_string = quote!{ #top_enum_type }.to_string();
-        //GOAT work out how and where to bracket these types
-        // let top_enum_type_string = quote!{ < #top_enum_type > }.to_string(); //GOAT
         let (_impl_generics, type_generics, _where_clause) = item_type.generics.split_for_impl();
 
         let mut sub_type_impls: Vec<proc_macro2::TokenStream> = (0..item_type.sub_types.len())
@@ -471,8 +468,6 @@ impl SummumImpl {
 
                     let sub_type = type_from_fields(&variant.fields);
                     let sub_type_string = quote!{ #sub_type }.to_string();
-                    //GOAT, work out how and where to bracket these types
-                    // let sub_type_string = quote!{ < #sub_type > }.to_string();
 
                     //Swap all the occurance of `self`, etc. in the block
                     let block_tokenstream = if item_type.sub_types.len() > 0 {
